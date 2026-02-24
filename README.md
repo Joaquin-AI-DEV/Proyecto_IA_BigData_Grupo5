@@ -1,9 +1,9 @@
 # Proyecto_IA_BigData_Grupo5
 
-Nombre del proyecto:
+# Nombre del proyecto:
 StockPulse
 
-Objetivo del proyecto:
+# Objetivo del proyecto:
 El objetivo es desarrollar un modelo de predicción de ventas que analice datos históricos o simule datos nuevos para ayudar con la toma de decisiones de compra y gestión de inventario. 
 
 Miembros:
@@ -12,10 +12,25 @@ Miembros:
     - Joaquín Fernández: Platform (API, despliegue, orquestación).
     - Jimmy Chen: BI (dashboard, KPIs).
 
-Organización del repo: 
+## Organización del repo
 
 El repositorio se organizará según las siguientes carpetas, con el objetivo de mantener el proyecto ordenado:
-    <pre> ```bash repo/ ├── docs/ │ └── Fase0_Presentacion_y_Viabilidad.pdf ├── src/ ├── data/ ├── environment/ ├── README.md └── .gitignore ``` </pre>
+
+```bash
+repo/
+│
+├── docs/
+│   └── Fase0_Presentacion_y_Viabilidad.pdf
+│
+├── src/
+│
+├── data/
+│
+├── environment/
+│
+├── README.md
+└── .gitignore
+
 
 📁 docs/
 Contendrá toda la documentación del proyecto:
@@ -47,3 +62,4 @@ Contendrá la configuración del entorno:
     - environment.yml
     - Configuración de dependencias
     - Notebooks de pruebas iniciales
+```
