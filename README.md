@@ -15,19 +15,7 @@ Miembros:
 Organización del repo: 
 
 El repositorio se organizará según las siguientes carpetas, con el objetivo de mantener el proyecto ordenado:
-    repo/
-    │
-    ├── docs/
-    │   └── Fase0_Presentacion_y_Viabilidad.pdf
-    │
-    ├── src/
-    │
-    ├── data/
-    │
-    ├── environment/
-    │
-    ├── README.md
-    └── .gitignore
+    <pre> ```bash repo/ ├── docs/ │ └── Fase0_Presentacion_y_Viabilidad.pdf ├── src/ ├── data/ ├── environment/ ├── README.md └── .gitignore ``` </pre>
 
 📁 docs/
 Contendrá toda la documentación del proyecto:
