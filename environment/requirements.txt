@@ -5,7 +5,7 @@
 # --- Procesamiento de datos ---
 pandas==2.2.2
 numpy==1.26.4
-openpyxl==3.1.2          # Lectura de archivos XLSX
+openpyxl==3.1.2         # Lectura de archivos XLSX
 
 # --- Base de datos (Supabase / PostgreSQL) ---
 psycopg2-binary==2.9.9   # Conector PostgreSQL
