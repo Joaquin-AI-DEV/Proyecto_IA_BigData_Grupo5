@@ -1,0 +1,26 @@
+# Entorno virtual
+venv/
+
+# Variables de entorno (credenciales Supabase)
+environment/.env
+.env
+
+# Datos - archivos grandes no se suben al repo
+data/raw/*.xlsx
+data/raw/*.csv
+data/processed/
+data/results/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
+Thumbs.db
