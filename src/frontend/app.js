@@ -48,15 +48,6 @@ async function submitLogin() {
   const password = document.getElementById('loginPassword').value;
   const btn = document.getElementById('loginBtn');
 
-  // LOGIN TEMPORAL - quitar cuando el backend esté listo
-  if (username === 'admin' && password === 'admin123') {
-    session.token = 'mock-token';
-    session.username = username;
-    closeLoginModal();
-    updateNavbar();
-    navigateTo('dashboard');
-  return;
-  }
   if (!username || !password) {
     showAlert('loginError', 'Rellena todos los campos.');
     return;
@@ -75,11 +66,11 @@ async function submitLogin() {
     const data = await res.json();
 
     if (!res.ok) {
-      showAlert('loginError', data.detail || 'Usuario o contrasena incorrectos.');
+      showAlert('loginError', data.detail || 'Usuario o contraseña incorrectos.');
       return;
     }
 
-    // Guardar sesion en memoria
+    // Guardar sesión en memoria
     session.token = data.token;
     session.username = data.username || username;
 
@@ -105,11 +96,11 @@ async function logout() {
     } catch (_) {}
   }
 
-  // Limpiar sesion de memoria
+  // Limpiar sesión de memoria
   session.token = null;
   session.username = null;
 
-  // Destruir graficos
+  // Destruir gráficos
   Object.values(charts).forEach(c => { if (c) c.destroy(); });
   Object.keys(charts).forEach(k => delete charts[k]);
 
@@ -149,7 +140,7 @@ function authHeaders() {
   };
 }
 
-//  CARGA DE ARCHIVOS
+// CARGA DE ARCHIVOS
 
 function handleUploadClick() {
   if (!session.isLoggedIn()) {
@@ -170,7 +161,6 @@ async function handleFileChange(event) {
   hideAlert('uploadError');
   hideAlert('uploadSuccess');
 
-  // Validar extensión
   const ext = file.name.split('.').pop().toLowerCase();
   if (!['csv', 'xlsx'].includes(ext)) {
     showAlert('uploadError', 'Formato no válido. Solo se permiten archivos .csv y .xlsx');
@@ -178,7 +168,6 @@ async function handleFileChange(event) {
     return;
   }
 
-  // Validar tamaño (max 50MB)
   if (file.size > 50 * 1024 * 1024) {
     showAlert('uploadError', 'El archivo es demasiado grande. Máximo 50MB.');
     event.target.value = '';
@@ -219,14 +208,199 @@ async function handleFileChange(event) {
   }
 }
 
-//  SIDEBAR TABS
+// DASHBOARD
+
+async function loadDashboard() {
+  const loading = document.getElementById('dashboardLoading');
+  const content = document.getElementById('dashboardContent');
+
+  loading.classList.add('show');
+  content.style.display = 'none';
+
+  try {
+    // Cargar KPIs y lista de productos en paralelo
+    const [kpisRes, productosRes] = await Promise.all([
+      fetch(`${API_BASE}/api/dashboard/kpis`, { headers: authHeaders() }),
+      fetch(`${API_BASE}/api/dashboard/productos`, { headers: authHeaders() }),
+    ]);
+
+    if (!kpisRes.ok || !productosRes.ok) {
+      console.error('Error cargando datos del dashboard.');
+      return;
+    }
+
+    const kpis = await kpisRes.json();
+    const productos = await productosRes.json();
+
+    // Actualizar KPIs
+    document.getElementById('kpiVentasTotales').textContent =
+      '£' + kpis.ventas_totales.toLocaleString('es-ES', { minimumFractionDigits: 2 });
+    document.getElementById('kpiUnidades').textContent =
+      kpis.unidades_totales.toLocaleString('es-ES');
+    document.getElementById('kpiProductos').textContent =
+      kpis.productos_distintos.toLocaleString('es-ES');
+
+    // Mostrar usuario en cabecera del dashboard
+    document.getElementById('dashboardUser').textContent = session.username;
+
+    // Rellenar selector de productos
+    const selector = document.getElementById('globalProductSelector');
+    selector.innerHTML = '';
+    productos.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id_producto;
+      opt.textContent = `${p.id_producto} — ${p.nombre.substring(0, 40)}`;
+      selector.appendChild(opt);
+    });
+
+    // Cargar gráficos para el primer producto de la lista
+    if (productos.length > 0) {
+      await updateAllCharts();
+    }
+
+    loading.classList.remove('show');
+    content.style.display = 'block';
+
+  } catch (err) {
+    console.error('Error en loadDashboard:', err);
+    loading.classList.remove('show');
+  }
+}
+
+async function updateAllCharts() {
+  const idProducto = document.getElementById('globalProductSelector').value;
+  if (!idProducto) return;
+
+  // Cargar ventas, predicciones e inversión en paralelo
+  const [ventasRes, predRes, invRes] = await Promise.all([
+    fetch(`${API_BASE}/api/dashboard/ventas/${idProducto}`, { headers: authHeaders() }),
+    fetch(`${API_BASE}/api/dashboard/predicciones/${idProducto}`, { headers: authHeaders() }),
+    fetch(`${API_BASE}/api/dashboard/inversion/${idProducto}`, { headers: authHeaders() }),
+  ]);
+
+  const ventas      = await ventasRes.json();
+  const predicciones = await predRes.json();
+  const inversion   = await invRes.json();
+
+  // Actualizar KPI de confianza del modelo
+  const kpiConf = document.getElementById('kpiConfianza');
+  if (predicciones.confianza !== null && predicciones.confianza !== undefined) {
+    kpiConf.textContent = (predicciones.confianza * 100).toFixed(1) + '%';
+  } else {
+    kpiConf.textContent = 'Sin datos';
+  }
+
+  renderChart('chartVentasMes', {
+    labels: ventas.fechas,
+    datasets: [{
+      label: 'Unidades vendidas',
+      data: ventas.unidades,
+      borderColor: '#1db954',
+      backgroundColor: 'rgba(29,185,84,0.1)',
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3,
+      pointRadius: 2,
+    }]
+  });
+
+  renderChart('chartPrediccion', {
+    labels: predicciones.fechas,
+    datasets: [{
+      label: 'Demanda estimada',
+      data: predicciones.predichas,
+      borderColor: '#2980b9',
+      backgroundColor: 'rgba(41,128,185,0.1)',
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3,
+      pointRadius: 2,
+    }]
+  });
+
+  renderChart('chartInversion', {
+    labels: inversion.fechas,
+    datasets: [{
+      label: 'Coste estimado (£)',
+      data: inversion.inversion,
+      borderColor: '#e67e22',
+      backgroundColor: 'rgba(230,126,34,0.1)',
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3,
+      pointRadius: 2,
+    }]
+  });
+
+  // Gráfico de seguridad del modelo (dona con métricas de confianza)
+  const conf = predicciones.confianza ? predicciones.confianza * 100 : 0;
+  renderDoughnut('chartSeguridad', conf);
+}
+
+function renderChart(canvasId, data) {
+  // Destruir gráfico anterior si existe
+  if (charts[canvasId]) {
+    charts[canvasId].destroy();
+  }
+
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type: 'line',
+    data: data,
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+      },
+      scales: {
+        x: {
+          ticks: { maxTicksLimit: 8, font: { size: 10 } },
+          grid: { display: false },
+        },
+        y: {
+          ticks: { font: { size: 10 } },
+          grid: { color: 'rgba(0,0,0,0.05)' },
+        }
+      }
+    }
+  });
+}
+
+function renderDoughnut(canvasId, confianzaPct) {
+  if (charts[canvasId]) {
+    charts[canvasId].destroy();
+  }
+
+  const resto = 100 - confianzaPct;
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Confianza', 'Margen de error'],
+      datasets: [{
+        data: [confianzaPct, resto],
+        backgroundColor: ['#1db954', '#dce4ed'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '70%',
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 } } },
+      }
+    }
+  });
+}
+
+// SIDEBAR TABS
 
 function showDashboardTab(tab) {
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
   event.currentTarget.classList.add('active');
 }
 
-//  ALERTAS
+// ALERTAS
 
 function showAlert(id, message) {
   const el = document.getElementById(id);
@@ -238,6 +412,5 @@ function hideAlert(id) {
   const el = document.getElementById(id);
   if (el) el.classList.remove('show');
 }
-
 
 updateNavbar();
