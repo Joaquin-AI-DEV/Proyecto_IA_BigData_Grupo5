@@ -11,6 +11,9 @@ data/raw/*.csv
 data/processed/
 data/results/
 
+# Modelos entrenados (se regeneran con train_model.py)
+src/models/saved/
+
 # Python
 __pycache__/
 *.pyc
