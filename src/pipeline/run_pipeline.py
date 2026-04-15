@@ -22,6 +22,7 @@ import argparse
 import os
 import sys
 import pandas as pd
+from database import get_connection
 
 # Añadir el directorio raíz al path para importar módulos del proyecto
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -29,7 +30,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from src.pipeline.ingest import load_dataset
 from src.pipeline.clean import clean_and_normalize, split_productos_ventas
 from src.pipeline.load_db import (
-    get_connection,
     create_tables,
     insert_productos,
     insert_ventas,

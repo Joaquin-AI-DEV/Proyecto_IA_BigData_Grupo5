@@ -30,11 +30,11 @@ def get_connection():
     """
     conn = psycopg2.connect(
         host=os.getenv("DB_HOST"),
-        port=int(os.getenv("DB_PORT", 5432)),
+        port=int(os.getenv("DB_PORT", 6543)),
         dbname=os.getenv("DB_NAME", "postgres"),
-        user=os.getenv("DB_USER", "postgres"),
+        user=os.getenv("DB_USER", "postgres.nbamabcfxtcltbzxuncg"),
         password=os.getenv("DB_PASSWORD"),
-        sslmode="require",          # SSL obligatorio en Supabase
-        cursor_factory=RealDictCursor,  # Devuelve filas como dicts, más cómodo
+        sslmode="require",
+        cursor_factory=RealDictCursor,
     )
     return conn
