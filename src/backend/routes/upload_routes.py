@@ -22,7 +22,10 @@ from auth import get_session_user
 
 # Importar el orquestador del pipeline de Sergio
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+# Ruta absoluta — funciona independientemente del directorio de trabajo
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(BASE_DIR, "..", "..", ".."))
+
 from src.pipeline.run_pipeline import run_pipeline
 
 router = APIRouter(prefix="/api", tags=["Carga de datos"])
