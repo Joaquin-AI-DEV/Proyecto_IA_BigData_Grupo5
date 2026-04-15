@@ -29,33 +29,11 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
+from database import get_connection
 
 
 # Cargar variables de entorno desde el archivo .env
 load_dotenv()
-
-
-def get_connection():
-    """
-    Crea y devuelve una conexión a la base de datos PostgreSQL en Supabase.
-
-    Retorna:
-        psycopg2.connection: Conexión activa a la base de datos.
-
-    Excepciones:
-        Exception: Si las credenciales son incorrectas o no hay conexión.
-    """
-    conn = psycopg2.connect(
-        host=os.getenv("DB_HOST"),
-        port=int(os.getenv("DB_PORT", 5432)),
-        dbname=os.getenv("DB_NAME", "postgres"),
-        user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD"),
-        # SSL requerido por Supabase
-        sslmode="require",
-    )
-    print("[DB] Conexión a Supabase establecida correctamente.")
-    return conn
 
 
 def create_tables(conn) -> None:
