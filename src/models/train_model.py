@@ -187,7 +187,16 @@ def plot_results(fechas, y_real, y_pred):
     plt.close()
 
 
-def main(filepath):
+def run_training(filepath):
+    """
+    Ejecuta el pipeline de entrenamiento completo y devuelve el DataFrame
+    de predicciones (fecha, ventas_reales, ventas_predichas) para que el
+    orquestador lo pueda insertar en la base de datos sin releer el CSV.
+
+    Efectos secundarios: guarda modelo, scaler, CSV de predicciones y gráfica.
+    """
+    # Lo llama run_pipeline.py justo después de cargar los datos en BD,
+    # para encadenar "datos limpios -> modelo entrenado -> predicciones".
     df_daily = load_and_aggregate(filepath)
     train, test = prepare_data(df_daily)
 
@@ -197,6 +206,15 @@ def main(filepath):
     save_predictions(fechas, y_real, y_pred)
     plot_results(fechas, y_real, y_pred)
 
+    return pd.DataFrame({
+        "fecha":            pd.to_datetime(fechas.values).date,
+        "ventas_reales":    y_real.values,
+        "ventas_predichas": y_pred,
+    })
+
+
+def main(filepath):
+    run_training(filepath)
     print("\nTodo listo!")
 
 

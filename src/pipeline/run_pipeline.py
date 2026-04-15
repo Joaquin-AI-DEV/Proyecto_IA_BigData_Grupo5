@@ -4,14 +4,16 @@ Proyecto: StockPulse
 Autor: Sergio Romero (Data Engineer)
 
 Responsabilidad:
-    Punto de entrada único del pipeline de datos.
-    Ejecuta en orden las tres capas:
-        1. Ingesta   → ingest.py
-        2. Limpieza  → clean.py
-        3. Carga BD  → load_db.py
+    Punto de entrada único del pipeline end-to-end.
+    Ejecuta en orden:
+        1. Ingesta            → ingest.py
+        2. Limpieza           → clean.py
+        3. Carga de datos BD  → load_db.py (productos + ventas)
+        4. Entrenamiento ML   → models/train_model.py
+        5. Carga predicciones → load_db.py (tabla predicciones, para el dashboard)
 
     También guarda una copia del dataset limpio en data/processed/
-    para que el módulo de ML (Deninson) pueda usarlo sin tocar la BD.
+    que consume el módulo de ML.
 
 Uso:
     python src/pipeline/run_pipeline.py --input data/raw/online_retail.xlsx
@@ -21,20 +23,24 @@ Uso:
 import argparse
 import os
 import sys
-import pandas as pd
-from database import get_connection
 
-# Añadir el directorio raíz al path para importar módulos del proyecto
+# Añadimos la raíz del proyecto al path para poder hacer imports con "src.*"
+# desde cualquier sitio (útil cuando lo ejecutáis desde la raíz del repo).
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
+# get_connection vive en src/backend/database.py y lo reutilizamos aquí.
+from src.backend.database import get_connection
 from src.pipeline.ingest import load_dataset
 from src.pipeline.clean import clean_and_normalize, split_productos_ventas
 from src.pipeline.load_db import (
     create_tables,
+    reset_data_tables,
     insert_productos,
     insert_ventas,
+    insert_predicciones,
     close_connection,
 )
+from src.models.train_model import run_training
 
 
 # Ruta donde se guarda el dataset procesado para el módulo ML
@@ -50,7 +56,9 @@ def run_pipeline(filepath: str) -> None:
         2. Aplica limpieza y normalización.
         3. Separa en tablas Productos y Ventas.
         4. Guarda el dataset limpio como CSV para el módulo ML.
-        5. Conecta a Supabase, crea tablas si no existen e inserta los datos.
+        5. Conecta a Supabase, crea tablas e inserta productos y ventas.
+        6. Entrena el modelo Ridge sobre el CSV limpio.
+        7. Inserta las predicciones en la tabla 'predicciones' para el dashboard.
 
     Parámetros:
         filepath (str): Ruta al archivo CSV o XLSX de entrada.
@@ -79,15 +87,29 @@ def run_pipeline(filepath: str) -> None:
     print(f"[PIPELINE] Dataset limpio guardado en: {PROCESSED_PATH}")
 
     # ---- PASO 5: INSERCIÓN EN BASE DE DATOS ----
-    print("\n>>> PASO 5: Inserción en Supabase (PostgreSQL)")
+    print("\n>>> PASO 5: Inserción en Supabase (productos + ventas)")
     conn = None
     try:
         conn = get_connection()
         create_tables(conn)
+        # Cada ejecución refleja exactamente el CSV de entrada: vaciamos las
+        # tres tablas antes de reinsertar para no mezclar con datos previos.
+        reset_data_tables(conn)
         insert_productos(conn, df_productos)
         insert_ventas(conn, df_ventas)
+
+        # ---- PASO 6: ENTRENAMIENTO DEL MODELO ----
+        # Encadenamos el train_model aquí: entrena Ridge y nos devuelve el
+        # DataFrame de predicciones listo para subirlo a BD.
+        print("\n>>> PASO 6: Entrenamiento del modelo (Ridge)")
+        df_pred = run_training(PROCESSED_PATH)
+
+        # ---- PASO 7: INSERCIÓN DE PREDICCIONES EN BD ----
+        # Push final: el dashboard leerá esta tabla para pintar las gráficas.
+        print("\n>>> PASO 7: Inserción de predicciones en Supabase")
+        insert_predicciones(conn, df_pred)
     except Exception as e:
-        print(f"\n[ERROR] Fallo durante la inserción en BD: {e}")
+        print(f"\n[ERROR] Fallo durante la fase BD/entrenamiento: {e}")
         print("[INFO] Los datos limpios sí se guardaron en data/processed/")
         raise
     finally:

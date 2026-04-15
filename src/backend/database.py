@@ -10,12 +10,15 @@ Responsabilidad:
 """
 
 import os
+from pathlib import Path
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
-# Cargar variables de entorno del archivo .env
-load_dotenv()
+# Resolver la ruta al .env de forma independiente al CWD.
+# Estructura: <proyecto>/src/backend/database.py  →  <proyecto>/environment/.env
+ENV_PATH = Path(__file__).resolve().parents[2] / "environment" / ".env"
+load_dotenv(dotenv_path=ENV_PATH)
 
 
 def get_connection():
@@ -26,15 +29,25 @@ def get_connection():
         psycopg2.connection: Conexión activa con cursor tipo diccionario.
 
     Excepciones:
+        RuntimeError: Si faltan variables obligatorias en el .env.
         psycopg2.OperationalError: Si no hay conexión o las credenciales son incorrectas.
     """
-    conn = psycopg2.connect(
-        host=os.getenv("DB_HOST"),
+    host     = os.getenv("DB_HOST")
+    user     = os.getenv("DB_USER")
+    password = os.getenv("DB_PASSWORD")
+
+    if not (host and user and password):
+        raise RuntimeError(
+            f"Faltan variables en {ENV_PATH}. Requeridas: DB_HOST, DB_USER, DB_PASSWORD. "
+            "Copia environment/.env.example a environment/.env y rellénalo."
+        )
+
+    return psycopg2.connect(
+        host=host,
         port=int(os.getenv("DB_PORT", 6543)),
         dbname=os.getenv("DB_NAME", "postgres"),
-        user=os.getenv("DB_USER", "postgres.nbamabcfxtcltbzxuncg"),
-        password=os.getenv("DB_PASSWORD"),
+        user=user,
+        password=password,
         sslmode="require",
         cursor_factory=RealDictCursor,
     )
-    return conn

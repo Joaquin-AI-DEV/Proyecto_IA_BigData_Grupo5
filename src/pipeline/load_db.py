@@ -10,11 +10,11 @@ Responsabilidad:
     También contiene la función de creación de tablas si no existen,
     lo que permite arrancar el sistema desde cero con una sola ejecución.
 
-Configuración necesaria (archivo .env en la raíz del proyecto):
-    DB_HOST     = <host de Supabase, p.ej. db.xxxx.supabase.co>
-    DB_PORT     = 5432
+Configuración necesaria (archivo environment/.env en la raíz del proyecto):
+    DB_HOST     = <host de Supabase, p.ej. aws-0-eu-west-1.pooler.supabase.com>
+    DB_PORT     = 6543
     DB_NAME     = postgres
-    DB_USER     = postgres
+    DB_USER     = <usuario del proyecto Supabase>
     DB_PASSWORD = <contraseña del proyecto Supabase>
 
 Nota sobre Supabase:
@@ -24,16 +24,8 @@ Nota sobre Supabase:
     de que un servidor local esté levantado.
 """
 
-import os
 import pandas as pd
-import psycopg2
 from psycopg2.extras import execute_values
-from dotenv import load_dotenv
-from database import get_connection
-
-
-# Cargar variables de entorno desde el archivo .env
-load_dotenv()
 
 
 def create_tables(conn) -> None:
@@ -83,6 +75,24 @@ def create_tables(conn) -> None:
         cur.execute(sql_create)
     conn.commit()
     print("[DB] Tablas creadas o ya existentes: productos, ventas, predicciones.")
+
+
+def reset_data_tables(conn) -> None:
+    """
+    Vacía las tres tablas del modelo (predicciones, ventas, productos) para
+    que cada ejecución del pipeline refleje exactamente el CSV de entrada,
+    sin mezclar catálogos ni predicciones de ejecuciones anteriores.
+
+    Usa TRUNCATE (más rápido que DELETE y reinicia los SERIAL) con CASCADE
+    para respetar las foreign keys entre las tablas.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "TRUNCATE TABLE predicciones, ventas, productos "
+            "RESTART IDENTITY CASCADE;"
+        )
+    conn.commit()
+    print("[DB] Tablas vaciadas: predicciones, ventas, productos.")
 
 
 def insert_productos(conn, df_productos: pd.DataFrame) -> None:
@@ -147,6 +157,52 @@ def insert_ventas(conn, df_ventas: pd.DataFrame, batch_size: int = 5000) -> None
 
     conn.commit()
     print(f"[DB] Total ventas insertadas: {insertados} registros.")
+
+
+def insert_predicciones(conn, df_pred: pd.DataFrame) -> None:
+    """
+    Vuelca las predicciones del modelo agregado (diario, sin id_producto)
+    en la tabla 'predicciones' para que el dashboard las consuma.
+
+    Idempotente: antes de insertar elimina las filas previas de este modelo
+    agregado (aquellas con id_producto IS NULL), para que múltiples
+    ejecuciones del pipeline no dupliquen registros.
+
+    Parámetros:
+        conn: Conexión activa de psycopg2.
+        df_pred (pd.DataFrame): Columnas fecha, ventas_reales, ventas_predichas.
+    """
+    if df_pred is None or df_pred.empty:
+        print("[DB] No hay predicciones que insertar.")
+        return
+
+    # id_producto = None porque el modelo es agregado (predice la demanda
+    # diaria total, no por producto). Ver memoria Fase 2 para la justificación.
+    records = [
+        (
+            None,
+            row.fecha,
+            int(round(row.ventas_predichas)),
+            int(round(row.ventas_reales)),
+            None,
+        )
+        for row in df_pred.itertuples(index=False)
+    ]
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM predicciones WHERE id_producto IS NULL;")
+        execute_values(
+            cur,
+            """
+            INSERT INTO predicciones
+                (id_producto, fecha_prediccion, unidades_predichas,
+                 unidades_vendidas, confianza_modelo)
+            VALUES %s;
+            """,
+            records,
+        )
+    conn.commit()
+    print(f"[DB] Predicciones insertadas: {len(records)} registros.")
 
 
 def close_connection(conn) -> None:

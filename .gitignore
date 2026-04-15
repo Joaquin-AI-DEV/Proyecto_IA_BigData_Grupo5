@@ -1,5 +1,8 @@
-# Entorno virtual
+# Entornos virtuales
 venv/
+venvProyectoFP/
+.venv/
+env/
 
 # Variables de entorno (credenciales Supabase)
 environment/.env
