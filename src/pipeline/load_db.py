@@ -153,50 +153,55 @@ def insert_ventas(conn, df_ventas: pd.DataFrame, batch_size: int = 5000) -> None
     print(f"[DB] Total ventas insertadas: {insertados} registros.")
 
 
-def insert_predicciones(conn, df_pred: pd.DataFrame) -> None:
+def insert_predicciones(conn, df_pred: pd.DataFrame, batch_size: int = 5000) -> None:
     """
-    Vuelca las predicciones del modelo agregado (diario, sin id_producto)
-    en la tabla 'predicciones' para que el dashboard las consuma.
+    Inserta las predicciones per-producto en la tabla 'predicciones'.
 
-    Idempotente: antes de insertar elimina las filas previas de este modelo
-    agregado (aquellas con id_producto IS NULL), para que múltiples
-    ejecuciones del pipeline no dupliquen registros.
+    El modelo se entrena sobre la serie agregada diaria por robustez
+    estadística (la mayoría de SKUs tienen histórico escaso). El
+    orquestador run_pipeline.py descompone las predicciones globales
+    per-producto aplicando la cuota histórica de ventas de cada SKU y
+    pasa aquí el DataFrame ya explotado.
 
     Parámetros:
         conn: Conexión activa de psycopg2.
-        df_pred (pd.DataFrame): Columnas fecha, ventas_reales, ventas_predichas.
+        df_pred (pd.DataFrame): Columnas requeridas:
+            id_producto, fecha, unidades_predichas, unidades_vendidas, confianza
+        batch_size (int): Filas por lote. Necesario porque el cross-join
+            de SKUs × días predichos genera cientos de miles de filas.
     """
     if df_pred is None or df_pred.empty:
         print("[DB] No hay predicciones que insertar.")
         return
 
-    # id_producto = None porque el modelo es agregado (predice la demanda
-    # diaria total, no por producto). Ver memoria Fase 2 para la justificación.
     records = [
         (
-            None,
+            row.id_producto,
             row.fecha,
-            int(round(row.ventas_predichas)),
-            int(round(row.ventas_reales)),
-            None,
+            int(round(row.unidades_predichas)),
+            int(round(row.unidades_vendidas)),
+            float(row.confianza) if row.confianza is not None else None,
         )
         for row in df_pred.itertuples(index=False)
     ]
 
+    sql = """
+        INSERT INTO predicciones
+            (id_producto, fecha_prediccion, unidades_predichas,
+             unidades_vendidas, confianza_modelo)
+        VALUES %s;
+    """
+
+    total = len(records)
+    insertados = 0
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM predicciones WHERE id_producto IS NULL;")
-        execute_values(
-            cur,
-            """
-            INSERT INTO predicciones
-                (id_producto, fecha_prediccion, unidades_predichas,
-                 unidades_vendidas, confianza_modelo)
-            VALUES %s;
-            """,
-            records,
-        )
+        for inicio in range(0, total, batch_size):
+            lote = records[inicio: inicio + batch_size]
+            execute_values(cur, sql, lote)
+            insertados += len(lote)
+            print(f"[DB] Predicciones insertadas: {insertados}/{total}...")
     conn.commit()
-    print(f"[DB] Predicciones insertadas: {len(records)} registros.")
+    print(f"[DB] Total predicciones insertadas: {total} registros.")
 
 
 def close_connection(conn) -> None:
