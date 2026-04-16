@@ -1,4 +1,0 @@
-modelo,RMSE,MAE,R2
-Ridge,5069.2,4355.06,0.6262
-Random Forest,5743.71,4673.21,0.5201
-Gradient Boosting,7259.98,5755.48,0.2333
