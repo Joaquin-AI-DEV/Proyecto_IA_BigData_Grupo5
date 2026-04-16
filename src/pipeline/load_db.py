@@ -30,7 +30,16 @@ from psycopg2.extras import execute_values
 
 def create_tables(conn) -> None:
     """
-    Crea las tres tablas del modelo de datos si no existen ya.
+    Recrea desde cero las tres tablas del modelo de datos.
+
+    Primero hace DROP TABLE IF EXISTS ... CASCADE para eliminar versiones
+    antiguas del esquema (por ejemplo si una ejecución previa creó
+    id_producto como INTEGER en lugar de VARCHAR) y a continuación las
+    crea con el esquema correcto. De esta forma el esquema del código
+    es siempre la única fuente de verdad.
+
+    Como el pipeline ya reescribe todo el dataset en cada ejecución,
+    borrar las tablas no supone pérdida de información real.
 
     Tablas creadas:
         - productos
@@ -42,8 +51,11 @@ def create_tables(conn) -> None:
     """
 
     sql_create = """
+        -- Se eliminan antes de crear para garantizar el esquema correcto
+        DROP TABLE IF EXISTS predicciones, ventas, productos CASCADE;
+
         -- Tabla de productos (catálogo)
-        CREATE TABLE IF NOT EXISTS productos (
+        CREATE TABLE productos (
             id_producto     VARCHAR(20)     PRIMARY KEY,
             nombre          VARCHAR(255)    NOT NULL,
             categoria       VARCHAR(100)    DEFAULT 'Sin categoría',
@@ -51,7 +63,7 @@ def create_tables(conn) -> None:
         );
 
         -- Tabla de ventas (transacciones históricas)
-        CREATE TABLE IF NOT EXISTS ventas (
+        CREATE TABLE ventas (
             id_venta            SERIAL          PRIMARY KEY,
             id_venta_original   VARCHAR(20),
             id_producto         VARCHAR(20)     REFERENCES productos(id_producto),
@@ -61,7 +73,7 @@ def create_tables(conn) -> None:
         );
 
         -- Tabla de predicciones (la rellena el módulo ML de Deninson)
-        CREATE TABLE IF NOT EXISTS predicciones (
+        CREATE TABLE predicciones (
             id_prediccion       SERIAL          PRIMARY KEY,
             id_producto         VARCHAR(20)     REFERENCES productos(id_producto),
             fecha_prediccion    DATE            NOT NULL,
@@ -74,25 +86,7 @@ def create_tables(conn) -> None:
     with conn.cursor() as cur:
         cur.execute(sql_create)
     conn.commit()
-    print("[DB] Tablas creadas o ya existentes: productos, ventas, predicciones.")
-
-
-def reset_data_tables(conn) -> None:
-    """
-    Vacía las tres tablas del modelo (predicciones, ventas, productos) para
-    que cada ejecución del pipeline refleje exactamente el CSV de entrada,
-    sin mezclar catálogos ni predicciones de ejecuciones anteriores.
-
-    Usa TRUNCATE (más rápido que DELETE y reinicia los SERIAL) con CASCADE
-    para respetar las foreign keys entre las tablas.
-    """
-    with conn.cursor() as cur:
-        cur.execute(
-            "TRUNCATE TABLE predicciones, ventas, productos "
-            "RESTART IDENTITY CASCADE;"
-        )
-    conn.commit()
-    print("[DB] Tablas vaciadas: predicciones, ventas, productos.")
+    print("[DB] Tablas recreadas desde cero: productos, ventas, predicciones.")
 
 
 def insert_productos(conn, df_productos: pd.DataFrame) -> None:

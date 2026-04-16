@@ -34,7 +34,6 @@ from src.pipeline.ingest import load_dataset
 from src.pipeline.clean import clean_and_normalize, split_productos_ventas
 from src.pipeline.load_db import (
     create_tables,
-    reset_data_tables,
     insert_productos,
     insert_ventas,
     insert_predicciones,
@@ -91,10 +90,9 @@ def run_pipeline(filepath: str) -> None:
     conn = None
     try:
         conn = get_connection()
+        # create_tables hace DROP + CREATE, así cada ejecución refleja
+        # exactamente el CSV de entrada y garantiza el esquema correcto.
         create_tables(conn)
-        # Cada ejecución refleja exactamente el CSV de entrada: vaciamos las
-        # tres tablas antes de reinsertar para no mezclar con datos previos.
-        reset_data_tables(conn)
         insert_productos(conn, df_productos)
         insert_ventas(conn, df_ventas)
 
