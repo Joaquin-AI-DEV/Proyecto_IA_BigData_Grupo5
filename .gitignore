@@ -13,6 +13,10 @@ backend/data/raw/*.xlsx
 backend/data/raw/*.csv
 backend/data/processed/
 backend/data/results/
+backend/data/raw/*.xlsx
+backend/data/raw/*.csv
+backend/data/processed/
+backend/data/results/
 
 # Modelos entrenados (se regeneran con train_model.py)
 src/models/saved/
