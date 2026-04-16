@@ -77,12 +77,10 @@ El proyecto utiliza tecnologías comunes en el ecosistema de Big Data y Data Sci
 - Prophet (alternativa para series temporales)
 
 **Base de datos**
-- MySQL
-- XAMPP (entorno local)
+- PostgreSQL (Supabase)
 
 **Visualización**
-- Power BI
-- Streamlit (alternativa en Python)
+- Uvicorn
 
 **Herramientas de desarrollo**
 - Git
@@ -97,14 +95,34 @@ El proyecto utiliza tecnologías comunes en el ecosistema de Big Data y Data Sci
 repo/
 │
 ├── docs/
-│   └── Fase0_Presentacion_y_Viabilidad.pdf
-│
-├── src/
-│
-├── data/
-│
+│   ├─── Fase0_Presentacion_y_Viabilidad.pdf
+│   ├─── Fase1_Grupo5.pdf
+│   └─── Fase2_Producto_Funcional_Local_y_Codigo_Grupo5.pdf
 ├── environment/
-│
+│   └─── requirements.txt
+├── src/
+│   ├─── backend
+│   │    ├─── routes
+│   │    │    ├─── __init__.py
+│   │    │    ├─── auth_routes.py
+│   │    │    ├─── dashboard_routes.py
+│   │    │    └─── upload_routes.py
+│   │    ├─── auth.py
+│   │    ├─── database.py
+│   │    └─── main.py
+│   ├─── frontend
+│   │    ├─── app.js
+│   │    ├─── index.html
+│   │    └─── styless.css
+│   ├─── models
+│   │    ├─── features.py
+│   │    └─── train_model.py
+│   └─── pipeline
+│        ├─── __init__.py
+│        ├─── clean.py
+│        ├─── ingest.py
+│        ├─── load_db.py
+│        └─── run_pipeline.py
 ├── README.md
 └── .gitignore
 
@@ -118,6 +136,12 @@ Contiene la documentación del proyecto:
 - Memoria técnica
 - Presentaciones
 
+### 📁 environment/
+Contiene la configuración del entorno:
+
+- `requirements.txt`
+- configuración de dependencias
+
 ### 📁 src/
 Contiene el código del proyecto:
 
@@ -127,23 +151,8 @@ Contiene el código del proyecto:
 - API o scripts de integración
 - Código del dashboard
 
-### 📁 data/
-Contiene los datasets del proyecto:
-
-- datos brutos
-- datos procesados
-- datasets de prueba
-
 ⚠️ Los datasets grandes no se subirán al repositorio.  
 Solo se incluirán muestras o instrucciones de descarga.
-
-### 📁 environment/
-Contiene la configuración del entorno:
-
-- `requirements.txt`
-- `environment.yml`
-- configuración de dependencias
-- notebooks de pruebas
 
 ---
 ```
@@ -154,46 +163,61 @@ Contiene la configuración del entorno:
 ## 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/usuario/StockPulse.git
-cd StockPulse
+git clone https://github.com/Joaquin-AI-DEV/Proyecto_IA_BigData_Grupo5.git
+cd Proyecto_IA_BigData_Grupo5
 ```
-## 2. Crear entorno virtual
+
+## 2. Crear y activar entorno virtual
+
+### Crear entorno virtual
+
 ```bash
 python -m venv venv
 ```
-Activar entorno:
 
-Windows
+### Activar en Windows
+
 ```bash
 venv\Scripts\activate
 ```
-Linux / Mac
+
+### Activar en Linux / Mac
+
 ```bash
 source venv/bin/activate
 ```
+
 ## 3. Instalar dependencias
+
 ```bash
 pip install -r environment/requirements.txt
 ```
-## 4. Ejecutar el pipeline de datos
+
+## 4. Configurar variables del entorno
+
 ```bash
-python src/data_pipeline.py
+# Copia el archivo de ejemplo y rellena las credenciales de Supabase:
+# Linux / Mac
+cp environment/.env.example environment/.env
+
+
+# Windows
+copy environment\.env.example environment\.env
+
+# El archivo .env debe contener:
+DB_HOST=aws-0-eu-west-1.pooler.supabase.com
+DB_PORT=6543
+DB_NAME=postgres
+DB_USER=postgres.nbamabcfxtcltbzxuncg
+DB_PASSWORD=123Grupo5321
 ```
-## 5. Entrenar el modelo
-```bash
-python src/train_model.py
-```
-## 6. Ejecutar dashboard (opcional)
-Si se usa Streamlit:
-```bash
-streamlit run src/dashboard.py
-```
+## 5. Ejecución del proyecto Carga de CSV y Inicio de sesión
+
+Ejecutar el comando: uvicorn main:app --reload --port 8000
+La máquina virtual debe estar encendida y las dependencias instaladas, debes encontrarte en la carpeta src/backend
+Verás la interfaz de inicio del proyecto, deberás inciar sesión con las credenciales:
+Usuario: admin
+Contraseña: admin123
+
 # Estado del proyecto
-Actualmente el proyecto se encuentra en fase de desarrollo dentro del curso de Especialización en Inteligencia Artificial y Big Data.
-
-Las próximas fases incluirán:
-
-- Implementación completa del pipeline de datos
-- Entrenamiento del modelo de predicción
-- Creación del dashboard interactivo
-- Evaluación del sistema
+El proyecto está en fase de pulido, durante la seguiente Fase se introducirán cambios en la visualización, métricas, resultados, métodos y accesibilidad del proyecto.
