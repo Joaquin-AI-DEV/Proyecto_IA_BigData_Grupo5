@@ -211,6 +211,48 @@ def get_predicciones_producto(id_producto: str, authorization: str = Header(None
         raise HTTPException(status_code=500, detail=f"Error al obtener predicciones: {str(e)}")
 
 
+# Endpoint para la predicción global (modelo agregado diario, sin id_producto).
+# Lo consume el dashboard para el gráfico "ventas reales vs predichas".
+@router.get("/predicciones-globales")
+def get_predicciones_globales(authorization: str = Header(None)):
+    """
+    Devuelve la serie temporal de predicciones del modelo agregado (Ridge).
+    Cada fila representa un día con sus ventas reales y predichas (sin producto).
+
+    Retorna:
+        {
+            "fechas":    ["2011-11-01", ...],
+            "reales":    [123, 145, ...],
+            "predichas": [130, 140, ...]
+        }
+    """
+    _require_session(authorization)
+
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            # Filtramos por id_producto IS NULL: así aislamos las predicciones
+            # del modelo agregado y no las mezclamos con posibles predicciones
+            # per-producto que se añadan en el futuro.
+            cur.execute("""
+                SELECT fecha_prediccion, unidades_vendidas, unidades_predichas
+                FROM predicciones
+                WHERE id_producto IS NULL
+                ORDER BY fecha_prediccion;
+            """)
+            rows = cur.fetchall()
+        conn.close()
+
+        return {
+            "fechas":    [str(r["fecha_prediccion"]) for r in rows],
+            "reales":    [int(r["unidades_vendidas"] or 0) for r in rows],
+            "predichas": [int(r["unidades_predichas"] or 0) for r in rows],
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener predicciones globales: {str(e)}")
+
+
 @router.get("/inversion/{id_producto}")
 def get_inversion_producto(id_producto: str, authorization: str = Header(None)):
     """

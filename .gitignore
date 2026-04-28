@@ -1,15 +1,22 @@
-# Entorno virtual
+# Entornos virtuales
 venv/
+venvProyectoFP/
+.venv/
+env/
 
 # Variables de entorno (credenciales Supabase)
 environment/.env
 .env
 
 # Datos - archivos grandes no se suben al repo
-data/raw/*.xlsx
-data/raw/*.csv
-data/processed/
-data/results/
+backend/data/raw/*.xlsx
+backend/data/raw/*.csv
+backend/data/processed/
+backend/data/results/
+backend/data/raw/*.xlsx
+backend/data/raw/*.csv
+backend/data/processed/
+backend/data/results/
 
 # Modelos entrenados (se regeneran con train_model.py)
 src/models/saved/
