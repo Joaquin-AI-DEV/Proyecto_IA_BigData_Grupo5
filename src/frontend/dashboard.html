@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockPulse — Dashboard</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+ 
+  <!-- Navbar inyectada dinámicamente -->
+  <div id="navbar-placeholder"></div>
+ 
+  <div class="dashboard-layout">
+ 
+    <!-- Sidebar inyectado dinámicamente -->
+    <div id="sidebar-placeholder" style="display:contents;"></div>
+ 
+    <main class="dashboard-main">
+ 
+      <div class="loading" id="dashboardLoading">
+        <div class="spinner"></div>
+        <span>Procesando datos y entrenando modelo...</span>
+      </div>
+ 
+      <div id="dashboardContent" style="display:none;">
+ 
+        <div class="dashboard-header">
+          <h2>Resumen de ventas</h2>
+          <p>Datos cargados por <strong id="dashboardUser"></strong></p>
+        </div>
+ 
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Ventas totales</div>
+            <div class="kpi-value" id="kpiVentasTotales">--</div>
+            <div class="kpi-sub">Periodo completo</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Unidades vendidas</div>
+            <div class="kpi-value" id="kpiUnidades">--</div>
+            <div class="kpi-sub">Total de registros</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Productos distintos</div>
+            <div class="kpi-value" id="kpiProductos">--</div>
+            <div class="kpi-sub">En el dataset</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Confianza del modelo</div>
+            <div class="kpi-value green" id="kpiConfianza">--</div>
+          </div>
+        </div>
+ 
+        <div style="margin-bottom:1.25rem; display:flex; align-items:center; gap:0.75rem;">
+          <label style="font-size:0.85rem; font-weight:600; color:var(--navy);">Producto:</label>
+          <select class="product-selector" id="globalProductSelector" onchange="updateAllCharts()">
+            <option value="">Cargando productos...</option>
+          </select>
+        </div>
+ 
+        <div class="charts-grid">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div>
+                <div class="chart-card-title">Ventas último mes</div>
+                <div class="chart-card-sub">Unidades vendidas por día</div>
+              </div>
+            </div>
+            <canvas id="chartVentasMes"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div>
+                <div class="chart-card-title">Predicción próximo mes</div>
+                <div class="chart-card-sub">Demanda estimada por día</div>
+              </div>
+            </div>
+            <canvas id="chartPrediccion"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div>
+                <div class="chart-card-title">Inversión prevista</div>
+                <div class="chart-card-sub">Coste estimado de reposición</div>
+              </div>
+            </div>
+            <canvas id="chartInversion"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div>
+                <div class="chart-card-title">Seguridad del modelo</div>
+                <div class="chart-card-sub">Porcentaje de confianza por métrica</div>
+              </div>
+            </div>
+            <canvas id="chartSeguridad"></canvas>
+          </div>
+        </div>
+ 
+      </div><!-- /dashboardContent -->
+    </main>
+  </div>
+ 
+  <script src="/static/js/session.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script>
+    // Cargar navbar y sidebar en paralelo, luego inicializar
+    Promise.all([
+      fetch('/frontend/navbar.html').then(r => r.text()),
+      fetch('/frontend/sidebar.html').then(r => r.text()),
+    ]).then(([navbarHtml, sidebarHtml]) => {
+      document.getElementById('navbar-placeholder').innerHTML = navbarHtml;
+ 
+      const sidebarEl = document.getElementById('sidebar-placeholder');
+      sidebarEl.innerHTML = sidebarHtml;
+      // Forzar que el placeholder no ocupe espacio propio en el grid
+      sidebarEl.style.display = 'contents';
+ 
+      // Marcar enlace activo en navbar
+      const link = document.querySelector('[data-page="dashboard"]');
+      if (link) link.classList.add('active');
+ 
+      updateNavbar();
+ 
+      // Si no hay sesión, mostrar modal de login; si la hay, cargar dashboard
+      if (!session.isLoggedIn()) {
+        openLoginModal();
+      } else {
+        loadDashboard();
+      }
+    });
+  </script>
+</body>
+</html>

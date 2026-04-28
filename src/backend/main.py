@@ -61,16 +61,26 @@ app.include_router(dashboard_router)  # /api/dashboard/…
 # Ruta a la carpeta frontend relativa a src/backend/
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FRONTEND_DIR = os.path.join(BASE_DIR, "..", "frontend")
 
-# Montar archivos estáticos (styles.css, app.js) bajo /static
+# Carpeta raíz del proyecto (un nivel arriba de /backend)
+PROJECT_DIR = os.path.join(BASE_DIR, "..")
 
+# Carpeta del frontend
+FRONTEND_DIR = os.path.join(PROJECT_DIR, "frontend")
+
+# Montar archivos estáticos bajo /static
+# Sirve: /static/css/styles.css, /static/js/app.js, /static/js/session.js
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+# Montar la carpeta frontend bajo /frontend para que los fetch() de navbar y sidebar
+# puedan recuperar navbar.html y sidebar.html desde el navegador
+app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
 @app.get("/")
 def serve_frontend():
-
-# Sirve el index.html al abrir http://localhost:8000 en el navegador.
-# Así no hace falta abrir el HTML manualmente — uvicorn lo sirve todo.
-
+    """
+    Sirve el index.html al abrir http://localhost:8000 en el navegador.
+    Así no hace falta abrir el HTML manualmente — uvicorn lo sirve todo.
+    """
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+ 

@@ -4,267 +4,54 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>StockPulse</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/css/styles.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 </head>
 <body>
-
-  <nav class="navbar">
-    <a class="navbar-brand" href="#" onclick="navigateTo('inicio')">
-      <span>StockPulse</span>
-    </a>
-
-    <ul class="navbar-links" id="navLinks">
-      <li><a href="#" onclick="navigateTo('inicio')" class="active" data-page="inicio">Inicio</a></li>
-      <li><a href="#" onclick="navigateTo('quienes')" data-page="quienes">Quiénes somos</a></li>
-      <li><a href="#" onclick="navigateTo('contacto')" data-page="contacto">Contacto</a></li>
-      <!-- Solo visible con sesión -->
-      <li id="navDashboardItem" style="display:none;">
-        <a href="#" onclick="navigateTo('dashboard')" data-page="dashboard">Dashboard</a>
-      </li>
-    </ul>
-
-    <div class="navbar-actions" id="navActions">
-      <!-- Sin sesión -->
-      <div id="navGuest">
-        <button class="btn btn-primary" onclick="openLoginModal()">Iniciar sesión</button>
-      </div>
-      <!-- Con sesión -->
-      <div id="navUser" style="display:none;" class="navbar-user">
-        <div class="navbar-avatar" id="navAvatar">A</div>
-        <span id="navUsername">admin</span>
-        <button class="btn btn-danger" onclick="logout()" style="margin-left:0.5rem;">Cerrar sesión</button>
-      </div>
+ 
+  <!-- Navbar inyectada dinámicamente -->
+  <div id="navbar-placeholder"></div>
+ 
+  <!-- HERO -->
+  <section class="hero">
+    <h2 class="hero-title">StockPulse</h2>
+    <span class="hero-badge">Sistema de predicción de demanda</span>
+    <h1>Anticipa tu <span>stock</span>,<br>optimiza tu negocio</h1>
+    <p>Carga tus datos de ventas y obtén predicciones precisas de demanda con modelos de machine learning.</p>
+ 
+    <div class="hero-actions">
+      <button class="btn btn-primary btn-lg" onclick="handleUploadClick()">
+        Cargar CSV / XLSX
+      </button>
+      <button class="btn btn-outline btn-lg" onclick="window.location.href='/frontend/ourproject.html'">
+        Saber más
+      </button>
     </div>
-  </nav>
-
-  <!-- INICIO -->
-  <div class="page active" id="page-inicio">
-    <section class="hero">
-      <h2 class="hero-title">StockPulse</h2>
-      <span class="hero-badge">Sistema de predicción de demanda</span>
-      <h1>Anticipa tu <span>stock</span>,<br>optimiza tu negocio</h1>
-      <p>Carga tus datos de ventas y obtén predicciones precisas de demanda con modelos de machine learning.</p>
-
-      <div class="hero-actions">
-        <button class="btn btn-primary btn-lg" onclick="handleUploadClick()">
-          Cargar CSV / XLSX
-        </button>
-        <button class="btn btn-outline btn-lg" onclick="navigateTo('quienes')">
-          Saber más
-        </button>
-      </div>
-
-      <!-- Upload area (visible solo con sesión) -->
-      <div class="upload-area" id="uploadArea" style="display:none;" onclick="triggerFileInput()">
-        <input type="file" id="fileInput" accept=".csv,.xlsx" onchange="handleFileChange(event)" onclick="event.stopPropagation()" />
-        <span class="upload-icon">&#128196;</span>
-        <p><span class="upload-label">Selecciona un archivo</span> o arrastralo aqui</p>
-        <p style="margin-top:0.4rem; font-size:0.78rem;">Solo .csv y .xlsx</p>
-      </div>
-
-      <div class="alert alert-error" id="uploadError"></div>
-      <div class="alert alert-success" id="uploadSuccess"></div>
-    </section>
-  </div>
-
-
-  <div class="page" id="page-quienes">
-    <div class="static-page">
-      <h1>Quiénes somos</h1>
-      <p class="lead">
-        StockPulse es un proyecto desarrollado por estudiantes del Curso de Especialización en
-        Inteligencia Artificial y Big Data. Nuestro objetivo es construir un sistema de predicción
-        de demanda accesible, fiable y facil de usar para cualquier empresa.
-      </p>
-
-      <div class="team-grid">
-        <div class="team-card">
-          <div class="team-card-avatar">JC</div>
-          <h3>Jimmy Chen</h3>
-          <p>Business Intelligence</p>
-        </div>
-        <div class="team-card">
-          <div class="team-card-avatar">JF</div>
-          <h3>Joaquin Fernandez</h3>
-          <p>Platform / Project Manager</p>
-        </div>
-        <div class="team-card">
-          <div class="team-card-avatar">SR</div>
-          <h3>Sergio Romero</h3>
-          <p>Data Engineer</p>
-        </div>
-        <div class="team-card">
-          <div class="team-card-avatar">DT</div>
-          <h3>Deninson Tapia</h3>
-          <p>Data Scientist</p>
-        </div>
-      </div>
+ 
+    <!-- Upload area (visible solo con sesión) -->
+    <div class="upload-area" id="uploadArea" style="display:none;" onclick="triggerFileInput()">
+      <input type="file" id="fileInput" accept=".csv,.xlsx" onchange="handleFileChange(event)" onclick="event.stopPropagation()" />
+      <span class="upload-icon">&#128196;</span>
+      <p><span class="upload-label">Selecciona un archivo</span> o arrastralo aquí</p>
+      <p style="margin-top:0.4rem; font-size:0.78rem;">Solo .csv y .xlsx</p>
     </div>
-  </div>
-
-
-  <div class="page" id="page-contacto">
-    <div class="static-page">
-      <h1>Contacto</h1>
-      <p class="lead">¿Tienes alguna pregunta sobre StockPulse? Escríbenos.</p>
-      <div class="contact-form">
-        <div class="form-group">
-          <label>Nombre</label>
-          <input type="text" placeholder="Tu nombre" />
-        </div>
-        <div class="form-group">
-          <label>Email</label>
-          <input type="email" placeholder="tu@email.com" />
-        </div>
-        <div class="form-group">
-          <label>Mensaje</label>
-          <input type="text" placeholder="Tu mensaje..." />
-        </div>
-        <button class="btn btn-primary" style="margin-top:0.5rem;">Enviar mensaje</button>
-      </div>
-    </div>
-  </div>
-
-
-  <div class="page" id="page-dashboard">
-    <div class="dashboard-layout">
-
-      <aside class="sidebar">
-        <div class="sidebar-section">
-          <div class="sidebar-title">Navegación</div>
-          <a class="sidebar-item active" onclick="showDashboardTab('overview')">
-            <span class="sidebar-icon">&#9632;</span> Resumen
-          </a>
-          <a class="sidebar-item" onclick="showDashboardTab('ventas')">
-            <span class="sidebar-icon">&#9650;</span> Ventas
-          </a>
-          <a class="sidebar-item" onclick="showDashboardTab('predicciones')">
-            <span class="sidebar-icon">&#9670;</span> Predicciones
-          </a>
-        </div>
-        <div class="sidebar-section">
-          <div class="sidebar-title">Datos</div>
-          <a class="sidebar-item" onclick="handleUploadClick()">
-            <span class="sidebar-icon">&#8593;</span> Cargar nuevo CSV
-          </a>
-        </div>
-      </aside>
-
-      <main class="dashboard-main">
-
-        <div class="loading" id="dashboardLoading">
-          <div class="spinner"></div>
-          <span>Procesando datos y entrenando modelo...</span>
-        </div>
-
-        <div id="dashboardContent" style="display:none;">
-
-          <div class="dashboard-header">
-            <h2>Resumen de ventas</h2>
-            <p id="dashboardSubtitle">Datos cargados por <strong id="dashboardUser"></strong></p>
-          </div>
-
-          <div class="kpi-grid">
-            <div class="kpi-card">
-              <div class="kpi-label">Ventas totales</div>
-              <div class="kpi-value" id="kpiVentasTotales">--</div>
-              <div class="kpi-sub">Periodo completo</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Unidades vendidas</div>
-              <div class="kpi-value" id="kpiUnidades">--</div>
-              <div class="kpi-sub">Total de registros</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Productos distintos</div>
-              <div class="kpi-value" id="kpiProductos">--</div>
-              <div class="kpi-sub">En el dataset</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Confianza del modelo</div>
-              <div class="kpi-value green" id="kpiConfianza">--</div>
-            </div>
-          </div>
-
-          <div style="margin-bottom:1.25rem; display:flex; align-items:center; gap:0.75rem;">
-            <label style="font-size:0.85rem; font-weight:600; color:var(--navy);">Producto:</label>
-            <select class="product-selector" id="globalProductSelector" onchange="updateAllCharts()">
-              <option value="">Cargando productos...</option>
-            </select>
-          </div>
-
-          <div class="charts-grid">
-
-            <div class="chart-card">
-              <div class="chart-card-header">
-                <div>
-                  <div class="chart-card-title">Ventas ultimo mes</div>
-                  <div class="chart-card-sub">Unidades vendidas por día</div>
-                </div>
-              </div>
-              <canvas id="chartVentasMes"></canvas>
-            </div>
-
-            <div class="chart-card">
-              <div class="chart-card-header">
-                <div>
-                  <div class="chart-card-title">Predicción próximo mes</div>
-                  <div class="chart-card-sub">Demanda estimada por día</div>
-                </div>
-              </div>
-              <canvas id="chartPrediccion"></canvas>
-            </div>
-
-            <div class="chart-card">
-              <div class="chart-card-header">
-                <div>
-                  <div class="chart-card-title">Inversión prevista</div>
-                  <div class="chart-card-sub">Coste estimado de reposición</div>
-                </div>
-              </div>
-              <canvas id="chartInversion"></canvas>
-            </div>
-
-            <div class="chart-card">
-              <div class="chart-card-header">
-                <div>
-                  <div class="chart-card-title">Seguridad del modelo</div>
-                  <div class="chart-card-sub">Porcentaje de confianza por métrica</div>
-                </div>
-              </div>
-              <canvas id="chartSeguridad"></canvas>
-            </div>
-
-          </div>
-        </div>
-      </main>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="loginModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Iniciar sesión</h2>
-        <p>Accede con tu cuenta de StockPulse</p>
-      </div>
-      <div class="form-group">
-        <label>Usuario</label>
-        <input type="text" id="loginUsername" placeholder="Usuario" autocomplete="off" />
-      </div>
-      <div class="form-group">
-        <label>Contraseña</label>
-        <input type="password" id="loginPassword" placeholder="Contraseña" autocomplete="off"
-               onkeydown="if(event.key==='Enter') submitLogin()" />
-      </div>
-      <div class="alert alert-error" id="loginError"></div>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeLoginModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="submitLogin()" id="loginBtn">Entrar</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="/static/app.js"></script>
+ 
+    <div class="alert alert-error"   id="uploadError"></div>
+    <div class="alert alert-success" id="uploadSuccess"></div>
+  </section>
+ 
+  <script src="/static/js/session.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script>
+    fetch('/frontend/navbar.html')
+      .then(r => r.text())
+      .then(html => {
+        document.getElementById('navbar-placeholder').innerHTML = html;
+        // Marcar enlace activo
+        const link = document.querySelector('[data-page="inicio"]');
+        if (link) link.classList.add('active');
+        updateNavbar();
+      });
+  </script>
 </body>
 </html>

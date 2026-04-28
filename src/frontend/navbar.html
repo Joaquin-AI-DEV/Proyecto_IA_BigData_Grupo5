@@ -1,0 +1,51 @@
+<!-- navbar.html — Barra de navegación superior de StockPulse -->
+<nav class="navbar">
+  <a class="navbar-brand" href="/frontend/index.html">
+    <span>StockPulse</span>
+  </a>
+ 
+  <ul class="navbar-links" id="navLinks">
+    <li><a href="/frontend/index.html" data-page="inicio">Inicio</a></li>
+    <li><a href="/frontend/ourproject.html" data-page="quienes">Quiénes somos</a></li>
+    <li><a href="/frontend/contact.html" data-page="contacto">Contacto</a></li>
+    <li id="navDashboardItem" style="display:none;">
+      <a href="/frontend/dashboard.html" data-page="dashboard">Dashboard</a>
+    </li>
+  </ul>
+ 
+  <div class="navbar-actions" id="navActions">
+    <div id="navGuest">
+      <button class="btn btn-primary" onclick="openLoginModal()">Iniciar sesión</button>
+    </div>
+    <div id="navUser" style="display:none;" class="navbar-user">
+      <div class="navbar-avatar" id="navAvatar">A</div>
+      <span id="navUsername">admin</span>
+      <button class="btn btn-danger" onclick="logout()" style="margin-left:0.5rem;">Cerrar sesión</button>
+    </div>
+  </div>
+</nav>
+ 
+<!-- Modal de login — disponible en todas las páginas que incluyan navbar -->
+<div class="modal-overlay" id="loginModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Iniciar sesión</h2>
+      <p>Accede con tu cuenta de StockPulse</p>
+    </div>
+    <div class="form-group">
+      <label>Usuario</label>
+      <input type="text" id="loginUsername" placeholder="Usuario" autocomplete="off" />
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="loginPassword" placeholder="Contraseña" autocomplete="off"
+             onkeydown="if(event.key==='Enter') submitLogin()" />
+    </div>
+    <div class="alert alert-error" id="loginError"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeLoginModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="submitLogin()" id="loginBtn">Entrar</button>
+    </div>
+  </div>
+</div>
+ 
