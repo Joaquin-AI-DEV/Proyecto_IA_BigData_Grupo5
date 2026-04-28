@@ -11,12 +11,12 @@ environment/.env
 # Datos - archivos grandes no se suben al repo
 backend/data/raw/*.xlsx
 backend/data/raw/*.csv
-backend/data/processed/
-backend/data/results/
 backend/data/raw/*.xlsx
 backend/data/raw/*.csv
-backend/data/processed/
-backend/data/results/
+backend/data/processed/*.xlsx
+backend/data/processed/*.csv
+backend/data/results/*.xlsx
+backend/data/results/*.csv
 
 # Modelos entrenados (se regeneran con train_model.py)
 src/models/saved/

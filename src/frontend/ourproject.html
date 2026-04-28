@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockPulse — Quiénes somos</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+ 
+  <div id="navbar-placeholder"></div>
+ 
+  <div class="static-page">
+    <h1>Quiénes somos</h1>
+    <p class="lead">
+      StockPulse es un proyecto desarrollado por estudiantes del Curso de Especialización en
+      Inteligencia Artificial y Big Data. Nuestro objetivo es construir un sistema de predicción
+      de demanda accesible, fiable y fácil de usar para cualquier empresa.
+    </p>
+ 
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="team-card-avatar">JC</div>
+        <h3>Jimmy Chen</h3>
+        <p>Business Intelligence</p>
+      </div>
+      <div class="team-card">
+        <div class="team-card-avatar">JF</div>
+        <h3>Joaquin Fernandez</h3>
+        <p>Platform / Project Manager</p>
+      </div>
+      <div class="team-card">
+        <div class="team-card-avatar">SR</div>
+        <h3>Sergio Romero</h3>
+        <p>Data Engineer</p>
+      </div>
+      <div class="team-card">
+        <div class="team-card-avatar">DT</div>
+        <h3>Deninson Tapia</h3>
+        <p>Data Scientist</p>
+      </div>
+    </div>
+  </div>
+ 
+  <script src="/static/js/session.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script>
+    fetch('/frontend/navbar.html')
+      .then(r => r.text())
+      .then(html => {
+        document.getElementById('navbar-placeholder').innerHTML = html;
+        const link = document.querySelector('[data-page="quienes"]');
+        if (link) link.classList.add('active');
+        updateNavbar();
+      });
+  </script>
+</body>
+</html>
+ 

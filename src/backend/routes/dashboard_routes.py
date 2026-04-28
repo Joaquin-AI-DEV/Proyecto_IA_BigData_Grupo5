@@ -300,3 +300,4 @@ def get_inversion_producto(id_producto: str, authorization: str = Header(None)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al calcular inversión: {str(e)}")
+ 
