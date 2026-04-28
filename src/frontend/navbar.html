@@ -24,28 +24,3 @@
     </div>
   </div>
 </nav>
- 
-<!-- Modal de login — disponible en todas las páginas que incluyan navbar -->
-<div class="modal-overlay" id="loginModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h2>Iniciar sesión</h2>
-      <p>Accede con tu cuenta de StockPulse</p>
-    </div>
-    <div class="form-group">
-      <label>Usuario</label>
-      <input type="text" id="loginUsername" placeholder="Usuario" autocomplete="off" />
-    </div>
-    <div class="form-group">
-      <label>Contraseña</label>
-      <input type="password" id="loginPassword" placeholder="Contraseña" autocomplete="off"
-             onkeydown="if(event.key==='Enter') submitLogin()" />
-    </div>
-    <div class="alert alert-error" id="loginError"></div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeLoginModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="submitLogin()" id="loginBtn">Entrar</button>
-    </div>
-  </div>
-</div>
- 

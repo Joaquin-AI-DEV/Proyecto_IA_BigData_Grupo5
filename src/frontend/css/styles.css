@@ -311,52 +311,7 @@ body {
 .alert-error { background: rgba(231,76,60,0.1); border: 1px solid rgba(231,76,60,0.3); color: #e74c3c; }
 .alert-success { background: var(--green-soft); border: 1px solid rgba(29,185,84,0.3); color: var(--green-dark); }
  
-/* Login Modal */
-.modal-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(13,27,42,0.7);
-  backdrop-filter: blur(4px);
-  z-index: 200;
-  align-items: center;
-  justify-content: center;
-}
- 
-.modal-overlay.show { display: flex; }
- 
-.modal {
-  background: var(--white);
-  border-radius: var(--radius);
-  padding: 2.5rem;
-  width: 100%;
-  max-width: 400px;
-  box-shadow: var(--shadow-lg);
-  animation: modalIn 0.25s ease;
-}
- 
-@keyframes modalIn {
-  from { opacity: 0; transform: translateY(-16px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
- 
-.modal-header {
-  margin-bottom: 1.75rem;
-}
- 
-.modal-header h2 {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--navy);
-  letter-spacing: -0.02em;
-}
- 
-.modal-header p {
-  color: var(--text-muted);
-  font-size: 0.875rem;
-  margin-top: 0.25rem;
-}
- 
+/* Login Modal — form fields */
 .form-group {
   margin-bottom: 1.1rem;
 }
@@ -386,13 +341,6 @@ body {
   border-color: var(--navy);
   background: var(--white);
   box-shadow: 0 0 0 3px rgba(13,27,42,0.07);
-}
- 
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
 }
  
 /* Dashboard */
@@ -676,6 +624,119 @@ canvas { max-height: 220px; }
   margin-top: 1.5rem;
 }
  
+/* ── Modal overlay (login + logout) ──────────────────────────────────────── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(13,27,42,0.7);
+  backdrop-filter: blur(4px);
+  z-index: 9999;          /* Por encima de navbar (z-index:100) y cualquier otro elemento */
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay.show { display: flex; }
+
+.modal {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: var(--shadow-lg);
+  animation: modalIn 0.25s ease;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(-16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+.modal-header { margin-bottom: 1.75rem; }
+
+.modal-header h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -0.02em;
+}
+
+.modal-header p {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+/* ── Logout overlay (específico) ─────────────────────────────────────────── */
+.logout-modal {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 2rem 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-lg);
+  animation: modalIn 0.2s ease;
+  min-width: 280px;
+}
+
+.logout-modal-body {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.logout-spinner {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 3px solid var(--border);
+  border-top-color: #e74c3c;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+.logout-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.logout-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--navy);
+  margin: 0;
+}
+
+.logout-sub {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Puntos animados: "Borrando la base de datos..." */
+.logout-dots::after {
+  content: '';
+  animation: logoutDots 1.4s steps(4, end) infinite;
+}
+
+@keyframes logoutDots {
+  0%   { content: '';    }
+  25%  { content: '.';   }
+  50%  { content: '..';  }
+  75%  { content: '...'; }
+  100% { content: '';    }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .charts-grid { grid-template-columns: 1fr; }
@@ -683,4 +744,3 @@ canvas { max-height: 220px; }
   .sidebar { display: none; }
   .hero h1 { font-size: 2rem; }
 }
- 
