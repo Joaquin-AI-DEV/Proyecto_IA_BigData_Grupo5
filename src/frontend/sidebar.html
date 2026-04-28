@@ -26,8 +26,14 @@
  
   <div class="sidebar-section">
     <div class="sidebar-title">Datos</div>
-    <a class="sidebar-item" id="sidebarUploadBtn" onclick="triggerFileInput()">
-      <span class="sidebar-icon">&#8593;</span> Cargar nuevo CSV
+    <a
+      class="sidebar-item sidebar-upload-btn"
+      id="sidebarUploadBtn"
+      onclick="triggerFileInput()"
+      data-state="empty"
+    >
+      <span class="sidebar-icon" id="sidebarUploadIcon">&#8593;</span>
+      <span id="sidebarUploadLabel">Cargar nuevo CSV</span>
     </a>
  
     <!-- Estado del upload: oculto por defecto -->
@@ -36,4 +42,140 @@
     </div>
   </div>
 </aside>
+ 
+<style>
+/* ── Upload button states ──────────────────────────────────── */
+ 
+/* Default: red — no data loaded */
+.sidebar-upload-btn[data-state="empty"] {
+  background: rgba(231, 76, 60, 0.10);
+  color: #c0392b;
+  border: 1.5px solid rgba(231, 76, 60, 0.25);
+  font-weight: 600;
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+.sidebar-upload-btn[data-state="empty"]:hover {
+  background: rgba(231, 76, 60, 0.18);
+  border-color: rgba(231, 76, 60, 0.5);
+  color: #e74c3c;
+}
+ 
+/* Loading: neutral pulse */
+.sidebar-upload-btn[data-state="loading"] {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+  font-weight: 600;
+  opacity: 0.7;
+  pointer-events: none;
+  animation: uploadPulse 1.2s ease-in-out infinite;
+}
+ 
+@keyframes uploadPulse {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 0.4; }
+}
+ 
+/* Success: green — data is loaded */
+.sidebar-upload-btn[data-state="loaded"] {
+  background: rgba(29, 185, 84, 0.10);
+  color: var(--green-dark);
+  border: 1.5px solid rgba(29, 185, 84, 0.30);
+  font-weight: 600;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.sidebar-upload-btn[data-state="loaded"]:hover {
+  background: rgba(29, 185, 84, 0.18);
+  border-color: rgba(29, 185, 84, 0.55);
+  color: var(--green-dark);
+}
+</style>
+ 
+<script>
+/**
+ * setSidebarUploadState(state)
+ * state: 'empty' | 'loading' | 'loaded'
+ *
+ * Controls the visual state of the upload button:
+ *   empty   → red  (no data in DB)
+ *   loading → grey pulse (upload / pipeline running)
+ *   loaded  → green (data exists in DB)
+ *
+ * The label always stays "Cargar nuevo CSV" — only color changes.
+ */
+function setSidebarUploadState(state) {
+  const btn   = document.getElementById('sidebarUploadBtn');
+  const icon  = document.getElementById('sidebarUploadIcon');
+  const label = document.getElementById('sidebarUploadLabel');
+  if (!btn) return;
+ 
+  btn.dataset.state = state;
+ 
+  if (state === 'loading') {
+    icon.textContent  = '⟳';
+    label.textContent = 'Cargando...';
+    btn.style.pointerEvents = 'none';
+  } else {
+    icon.textContent  = '↑';
+    label.textContent = 'Cargar nuevo CSV';
+    btn.style.pointerEvents = 'auto';
+  }
+}
+ 
+/**
+ * checkDbAndSetUploadState()
+ * Calls /api/dashboard/kpis to check whether there is data in the DB.
+ * Sets the button to 'loaded' (green) or 'empty' (red) accordingly.
+ */
+async function checkDbAndSetUploadState() {
+  // Guard: only run if a session is active
+  if (typeof session === 'undefined' || !session.isLoggedIn()) return;
+ 
+  try {
+    const res = await fetch(`${API_BASE}/api/dashboard/kpis`, {
+      headers: { 'Authorization': `Bearer ${session.token}`, 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) { setSidebarUploadState('empty'); return; }
+    const data = await res.json();
+    setSidebarUploadState((data.productos_distintos > 0) ? 'loaded' : 'empty');
+  } catch (_) {
+    setSidebarUploadState('empty');
+  }
+}
+ 
+// ── Hook into the existing upload lifecycle ─────────────────────────────────
+//
+// We patch the global setSidebarUploadBtn and setUploadStatus helpers so the
+// existing app.js flow automatically drives our new state machine without
+// touching app.js at all.
+ 
+// Wait until app.js is fully parsed before patching.
+document.addEventListener('DOMContentLoaded', () => {
+  // Patch setSidebarUploadBtn (called by handleFileChange in app.js)
+  const _origSetBtn = window.setSidebarUploadBtn;
+  window.setSidebarUploadBtn = function(enabled) {
+    if (_origSetBtn) _origSetBtn(enabled);
+    if (!enabled) {
+      setSidebarUploadState('loading');
+    }
+    // Re-enable is handled by setUploadStatus patch below
+  };
+ 
+  // Patch setUploadStatus (called by handleFileChange in app.js)
+  const _origSetStatus = window.setUploadStatus;
+  window.setUploadStatus = function(state, message) {
+    if (_origSetStatus) _origSetStatus(state, message);
+    if (state === 'success') {
+      // Data was just uploaded — switch to green
+      setSidebarUploadState('loaded');
+    } else if (state === 'error') {
+      // Upload failed — revert to previous DB state
+      checkDbAndSetUploadState();
+    }
+  };
+ 
+  // Set initial state based on what's already in the DB
+  checkDbAndSetUploadState();
+});
+</script>
  
