@@ -6,11 +6,12 @@ Autor: Sergio Romero (Data Engineer)
 Responsabilidad:
     Punto de entrada único del pipeline end-to-end.
     Ejecuta en orden:
-        1. Ingesta            → ingest.py
-        2. Limpieza           → clean.py
-        3. Carga de datos BD  → load_db.py (productos + ventas)
-        4. Entrenamiento ML   → models/train_model.py
-        5. Carga predicciones → load_db.py (tabla predicciones, para el dashboard)
+        1. Ingesta               → ingest.py
+        2. Limpieza              → clean.py
+        3. Carga de datos BD     → load_db.py (productos + ventas)
+        4. Entrenamiento ML      → models/train_model.py (modelo agregado)
+        5. Descomposición per-SKU → cuota histórica sobre predicción global
+        6. Carga de predicciones → load_db.py (tabla predicciones per-producto)
 
     También guarda una copia del dataset limpio en data/processed/
     que consume el módulo de ML.
@@ -34,7 +35,6 @@ from src.pipeline.ingest import load_dataset
 from src.pipeline.clean import clean_and_normalize, split_productos_ventas
 from src.pipeline.load_db import (
     create_tables,
-    reset_data_tables,
     insert_productos,
     insert_ventas,
     insert_predicciones,
@@ -91,23 +91,55 @@ def run_pipeline(filepath: str) -> None:
     conn = None
     try:
         conn = get_connection()
+        # create_tables hace DROP + CREATE, así cada ejecución refleja
+        # exactamente el CSV de entrada y garantiza el esquema correcto.
         create_tables(conn)
-        # Cada ejecución refleja exactamente el CSV de entrada: vaciamos las
-        # tres tablas antes de reinsertar para no mezclar con datos previos.
-        reset_data_tables(conn)
         insert_productos(conn, df_productos)
         insert_ventas(conn, df_ventas)
 
         # ---- PASO 6: ENTRENAMIENTO DEL MODELO ----
         # Encadenamos el train_model aquí: entrena Ridge y nos devuelve el
-        # DataFrame de predicciones listo para subirlo a BD.
+        # DataFrame de predicciones globales (columnas: fecha, ventas_reales,
+        # ventas_predichas) listo para descomponer per-producto.
         print("\n>>> PASO 6: Entrenamiento del modelo (Ridge)")
         df_pred = run_training(PROCESSED_PATH)
 
-        # ---- PASO 7: INSERCIÓN DE PREDICCIONES EN BD ----
+        # ---- PASO 7: DESCOMPOSICIÓN PER-PRODUCTO ----
+        # El modelo predice demanda diaria agregada; el dashboard la espera
+        # por SKU. Repartimos cada predicción global entre los productos
+        # según su cuota histórica de ventas, de forma que la tabla
+        # predicciones tenga una fila por (id_producto, fecha).
+        print("\n>>> PASO 7: Descomposición per-producto por cuota histórica")
+        from sklearn.metrics import r2_score
+
+        cuotas = df_ventas.groupby("id_producto")["unidades_vendidas"].sum()
+        cuotas = (cuotas / cuotas.sum()).rename("cuota").reset_index()
+        print(f"[PIPELINE] Cuotas calculadas para {len(cuotas)} productos.")
+
+        # R² del modelo como "confianza" para el KPI del dashboard.
+        # Se clipa a [0,1] porque el frontend lo pinta como porcentaje.
+        r2 = float(r2_score(df_pred["ventas_reales"], df_pred["ventas_predichas"]))
+        confianza = max(0.0, min(1.0, r2))
+        print(f"[PIPELINE] R² del modelo = {r2:.4f} → confianza = {confianza:.4f}")
+
+        df_pred_exp = df_pred.merge(cuotas, how="cross")
+        df_pred_exp["unidades_predichas"] = (
+            df_pred_exp["ventas_predichas"] * df_pred_exp["cuota"]
+        ).round()
+        df_pred_exp["unidades_vendidas"] = (
+            df_pred_exp["ventas_reales"] * df_pred_exp["cuota"]
+        ).round()
+        df_pred_exp["confianza"] = confianza
+        df_pred_exp = df_pred_exp[
+            ["id_producto", "fecha", "unidades_predichas",
+             "unidades_vendidas", "confianza"]
+        ]
+        print(f"[PIPELINE] Filas de predicciones a insertar: {len(df_pred_exp)}")
+
+        # ---- PASO 8: INSERCIÓN DE PREDICCIONES EN BD ----
         # Push final: el dashboard leerá esta tabla para pintar las gráficas.
-        print("\n>>> PASO 7: Inserción de predicciones en Supabase")
-        insert_predicciones(conn, df_pred)
+        print("\n>>> PASO 8: Inserción de predicciones en Supabase")
+        insert_predicciones(conn, df_pred_exp)
     except Exception as e:
         print(f"\n[ERROR] Fallo durante la fase BD/entrenamiento: {e}")
         print("[INFO] Los datos limpios sí se guardaron en data/processed/")
