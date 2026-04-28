@@ -10,11 +10,11 @@ Responsabilidad:
     También contiene la función de creación de tablas si no existen,
     lo que permite arrancar el sistema desde cero con una sola ejecución.
 
-Configuración necesaria (archivo .env en la raíz del proyecto):
-    DB_HOST     = <host de Supabase, p.ej. db.xxxx.supabase.co>
-    DB_PORT     = 5432
+Configuración necesaria (archivo environment/.env en la raíz del proyecto):
+    DB_HOST     = <host de Supabase, p.ej. aws-0-eu-west-1.pooler.supabase.com>
+    DB_PORT     = 6543
     DB_NAME     = postgres
-    DB_USER     = postgres
+    DB_USER     = <usuario del proyecto Supabase>
     DB_PASSWORD = <contraseña del proyecto Supabase>
 
 Nota sobre Supabase:
@@ -24,21 +24,22 @@ Nota sobre Supabase:
     de que un servidor local esté levantado.
 """
 
-import os
 import pandas as pd
-import psycopg2
 from psycopg2.extras import execute_values
-from dotenv import load_dotenv
-from database import get_connection
-
-
-# Cargar variables de entorno desde el archivo .env
-load_dotenv()
 
 
 def create_tables(conn) -> None:
     """
-    Crea las tres tablas del modelo de datos si no existen ya.
+    Recrea desde cero las tres tablas del modelo de datos.
+
+    Primero hace DROP TABLE IF EXISTS ... CASCADE para eliminar versiones
+    antiguas del esquema (por ejemplo si una ejecución previa creó
+    id_producto como INTEGER en lugar de VARCHAR) y a continuación las
+    crea con el esquema correcto. De esta forma el esquema del código
+    es siempre la única fuente de verdad.
+
+    Como el pipeline ya reescribe todo el dataset en cada ejecución,
+    borrar las tablas no supone pérdida de información real.
 
     Tablas creadas:
         - productos
@@ -50,8 +51,11 @@ def create_tables(conn) -> None:
     """
 
     sql_create = """
+        -- Se eliminan antes de crear para garantizar el esquema correcto
+        DROP TABLE IF EXISTS predicciones, ventas, productos CASCADE;
+
         -- Tabla de productos (catálogo)
-        CREATE TABLE IF NOT EXISTS productos (
+        CREATE TABLE productos (
             id_producto     VARCHAR(20)     PRIMARY KEY,
             nombre          VARCHAR(255)    NOT NULL,
             categoria       VARCHAR(100)    DEFAULT 'Sin categoría',
@@ -59,7 +63,7 @@ def create_tables(conn) -> None:
         );
 
         -- Tabla de ventas (transacciones históricas)
-        CREATE TABLE IF NOT EXISTS ventas (
+        CREATE TABLE ventas (
             id_venta            SERIAL          PRIMARY KEY,
             id_venta_original   VARCHAR(20),
             id_producto         VARCHAR(20)     REFERENCES productos(id_producto),
@@ -69,7 +73,7 @@ def create_tables(conn) -> None:
         );
 
         -- Tabla de predicciones (la rellena el módulo ML de Deninson)
-        CREATE TABLE IF NOT EXISTS predicciones (
+        CREATE TABLE predicciones (
             id_prediccion       SERIAL          PRIMARY KEY,
             id_producto         VARCHAR(20)     REFERENCES productos(id_producto),
             fecha_prediccion    DATE            NOT NULL,
@@ -82,7 +86,7 @@ def create_tables(conn) -> None:
     with conn.cursor() as cur:
         cur.execute(sql_create)
     conn.commit()
-    print("[DB] Tablas creadas o ya existentes: productos, ventas, predicciones.")
+    print("[DB] Tablas recreadas desde cero: productos, ventas, predicciones.")
 
 
 def insert_productos(conn, df_productos: pd.DataFrame) -> None:
@@ -147,6 +151,57 @@ def insert_ventas(conn, df_ventas: pd.DataFrame, batch_size: int = 5000) -> None
 
     conn.commit()
     print(f"[DB] Total ventas insertadas: {insertados} registros.")
+
+
+def insert_predicciones(conn, df_pred: pd.DataFrame, batch_size: int = 5000) -> None:
+    """
+    Inserta las predicciones per-producto en la tabla 'predicciones'.
+
+    El modelo se entrena sobre la serie agregada diaria por robustez
+    estadística (la mayoría de SKUs tienen histórico escaso). El
+    orquestador run_pipeline.py descompone las predicciones globales
+    per-producto aplicando la cuota histórica de ventas de cada SKU y
+    pasa aquí el DataFrame ya explotado.
+
+    Parámetros:
+        conn: Conexión activa de psycopg2.
+        df_pred (pd.DataFrame): Columnas requeridas:
+            id_producto, fecha, unidades_predichas, unidades_vendidas, confianza
+        batch_size (int): Filas por lote. Necesario porque el cross-join
+            de SKUs × días predichos genera cientos de miles de filas.
+    """
+    if df_pred is None or df_pred.empty:
+        print("[DB] No hay predicciones que insertar.")
+        return
+
+    records = [
+        (
+            row.id_producto,
+            row.fecha,
+            int(round(row.unidades_predichas)),
+            int(round(row.unidades_vendidas)),
+            float(row.confianza) if row.confianza is not None else None,
+        )
+        for row in df_pred.itertuples(index=False)
+    ]
+
+    sql = """
+        INSERT INTO predicciones
+            (id_producto, fecha_prediccion, unidades_predichas,
+             unidades_vendidas, confianza_modelo)
+        VALUES %s;
+    """
+
+    total = len(records)
+    insertados = 0
+    with conn.cursor() as cur:
+        for inicio in range(0, total, batch_size):
+            lote = records[inicio: inicio + batch_size]
+            execute_values(cur, sql, lote)
+            insertados += len(lote)
+            print(f"[DB] Predicciones insertadas: {insertados}/{total}...")
+    conn.commit()
+    print(f"[DB] Total predicciones insertadas: {total} registros.")
 
 
 def close_connection(conn) -> None:
