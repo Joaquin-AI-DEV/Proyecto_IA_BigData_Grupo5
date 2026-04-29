@@ -126,9 +126,6 @@ async function submitLogin() {
 }
  
 async function logout() {
-  // Mostrar popup de carga inmediatamente
-  showLogoutOverlay();
-
   // Llamar al endpoint de logout (borra la BD en el servidor)
   if (session.token) {
     try {
@@ -153,17 +150,6 @@ async function logout() {
   window.location.href = '/frontend/index.html';
 }
 
-/** Muestra el overlay de "borrando la base de datos" */
-function showLogoutOverlay() {
-  const overlay = document.getElementById('logoutOverlay');
-  if (overlay) overlay.classList.add('show');
-}
-
-/** Oculta el overlay */
-function hideLogoutOverlay() {
-  const overlay = document.getElementById('logoutOverlay');
-  if (overlay) overlay.classList.remove('show');
-}
 
 /**
  * Hace polling a /api/dashboard/kpis hasta que no haya datos en la BD,
