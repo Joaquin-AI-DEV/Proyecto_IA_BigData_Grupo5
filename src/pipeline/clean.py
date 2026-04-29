@@ -18,6 +18,13 @@ Responsabilidad:
     Al final devuelve dos DataFrames listos para insertar:
       - df_productos: columnas del modelo Productos
       - df_ventas:    columnas del modelo Ventas
+
+Cambios Fase 3:
+    - split_productos_ventas() ahora acepta el parámetro min_ventas (default=5).
+      Los productos con menos de min_ventas transacciones se excluyen tanto del
+      catálogo como del histórico de ventas. Esto reduce ruido en el modelo de
+      predicción (SKUs con 1-2 ventas aisladas no aportan patrón temporal y
+      distorsionan las cuotas históricas).
 """
 
 import pandas as pd
@@ -105,18 +112,46 @@ def clean_and_normalize(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def split_productos_ventas(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def split_productos_ventas(
+    df: pd.DataFrame,
+    min_ventas: int = 5,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Separa el DataFrame limpio en las dos tablas del modelo de datos:
       - Productos (catálogo único de productos)
       - Ventas (registros de transacciones)
 
+    Fase 3 — Filtro de productos con pocas ventas:
+        Los productos con menos de `min_ventas` transacciones se excluyen
+        del catálogo y del histórico. Motivo: SKUs con muy pocas apariciones
+        no tienen patrón temporal real; incluirlos añade ruido a las cuotas
+        históricas y empeora las predicciones del modelo.
+
     Parámetros:
         df (pd.DataFrame): DataFrame limpio devuelto por clean_and_normalize().
+        min_ventas (int): Número mínimo de transacciones para que un producto
+                          se incluya en el dataset final. Por defecto 5.
 
     Retorna:
         tuple: (df_productos, df_ventas)
     """
+
+    # --- Filtro de productos con pocas ventas ---
+    # Contamos cuántas transacciones tiene cada producto en el dataset limpio.
+    conteo_ventas = df.groupby("id_producto").size().rename("num_ventas")
+
+    # Nos quedamos solo con los IDs que superan el umbral mínimo.
+    productos_validos = conteo_ventas[conteo_ventas >= min_ventas].index
+
+    filas_antes = len(df)
+    df = df[df["id_producto"].isin(productos_validos)]
+    productos_filtrados = conteo_ventas[conteo_ventas < min_ventas].shape[0]
+
+    print(
+        f"[SPLIT] Filtro min_ventas={min_ventas}: "
+        f"{productos_filtrados} productos excluidos por pocas ventas. "
+        f"Filas restantes: {len(df)} (de {filas_antes})."
+    )
 
     # --- Tabla Productos ---
     # Un producto único se identifica por id_producto (StockCode)
@@ -134,7 +169,7 @@ def split_productos_ventas(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
     # Reordenar columnas según el modelo de BD
     df_productos = df_productos[["id_producto", "nombre", "categoria", "precio_unitario"]]
 
-    print(f"[SPLIT] Productos únicos: {len(df_productos)}")
+    print(f"[SPLIT] Productos únicos (tras filtro): {len(df_productos)}")
 
     # --- Tabla Ventas ---
     # Cada fila es una línea de transacción de venta
@@ -146,6 +181,6 @@ def split_productos_ventas(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
         "total_venta",
     ]].copy().reset_index(drop=True)
 
-    print(f"[SPLIT] Registros de ventas: {len(df_ventas)}")
+    print(f"[SPLIT] Registros de ventas (tras filtro): {len(df_ventas)}")
 
     return df_productos, df_ventas
