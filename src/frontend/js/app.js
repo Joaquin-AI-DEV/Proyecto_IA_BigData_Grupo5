@@ -8,15 +8,25 @@ const charts = {};
 // ─── MODO OSCURO ─────────────────────────────────────────────────────────────
 
 function initDarkMode() {
-  const saved = sessionStorage.getItem('darkMode');
-  if (saved === 'true') document.documentElement.classList.add('dark');
+  const isReload = performance.getEntriesByType('navigation')[0]?.type === 'reload';
+  
+  if (isReload) {
+    sessionStorage.removeItem('darkMode');
+    document.documentElement.classList.remove('dark');
+  } else {
+    const saved = sessionStorage.getItem('darkMode');
+    if (saved === 'true') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  }
+  
   renderDarkToggle();
 }
 
 function toggleDarkMode() {
   const isDark = document.documentElement.classList.toggle('dark');
-  sessionStorage.setItem('darkMode', isDark);
+  sessionStorage.setItem('darkMode', String(isDark));
   renderDarkToggle();
+  if (charts['chartSeguridad']) charts['chartSeguridad'].update();
 }
 
 function renderDarkToggle() {
@@ -489,6 +499,8 @@ function renderDoughnut(canvasId, confianzaPct) {
     },
     plugins: [centerTextPlugin]
   });
+
+  setTimeout(() => { if (charts[canvasId]) charts[canvasId].update(); }, 100);
 }
 
 // Muestra una gráfica vacía con mensaje cuando no hay datos
