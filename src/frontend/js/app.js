@@ -2,32 +2,14 @@
  * app.js — Lógica de interfaz de StockPulse
  * Depende de session.js (debe cargarse antes).
  */
-
+ 
 const charts = {};
-
+ 
 // ─── MODALES (overlay de logout + modal de login) ───────────────────────────
 // Se inyectan directamente en <body> para garantizar que el z-index funciona
 // correctamente y no quedan atrapados dentro de ningún contenedor.
-
+ 
 (function ensureModals() {
-  // Logout overlay
-  if (!document.getElementById('logoutOverlay')) {
-    const logoutOverlay = document.createElement('div');
-    logoutOverlay.className = 'modal-overlay';
-    logoutOverlay.id = 'logoutOverlay';
-    logoutOverlay.innerHTML = `
-      <div class="logout-modal">
-        <div class="logout-modal-body">
-          <div class="logout-spinner"></div>
-          <div class="logout-texts">
-            <p class="logout-title">Cerrando sesión</p>
-            <p class="logout-sub">Borrando la base de datos<span class="logout-dots"></span></p>
-          </div>
-        </div>
-      </div>`;
-    document.body.appendChild(logoutOverlay);
-  }
-
   // Login modal
   if (!document.getElementById('loginModal')) {
     const loginModal = document.createElement('div');
@@ -57,8 +39,8 @@ const charts = {};
     document.body.appendChild(loginModal);
   }
 })();
-
-
+ 
+ 
  
 // ─── AUTENTICACIÓN ──────────────────────────────────────────────────────────
  
@@ -126,9 +108,6 @@ async function submitLogin() {
 }
  
 async function logout() {
-  // Mostrar popup de carga inmediatamente
-  showLogoutOverlay();
-
   // Llamar al endpoint de logout (borra la BD en el servidor)
   if (session.token) {
     try {
@@ -138,33 +117,21 @@ async function logout() {
       });
     } catch (_) {}
   }
-
+ 
   // Destruir gráficas y limpiar sesión del cliente
   Object.values(charts).forEach(c => { if (c) c.destroy(); });
   Object.keys(charts).forEach(k => delete charts[k]);
-
+ 
   // Guardar el token antes de limpiarlo para poder hacer la comprobación
   const tokenParaCheck = session.token;
   session.clear();
-
+ 
   // Esperar a que la BD esté vacía antes de redirigir
   await waitForEmptyDb(tokenParaCheck);
-
+ 
   window.location.href = '/frontend/index.html';
 }
-
-/** Muestra el overlay de "borrando la base de datos" */
-function showLogoutOverlay() {
-  const overlay = document.getElementById('logoutOverlay');
-  if (overlay) overlay.classList.add('show');
-}
-
-/** Oculta el overlay */
-function hideLogoutOverlay() {
-  const overlay = document.getElementById('logoutOverlay');
-  if (overlay) overlay.classList.remove('show');
-}
-
+ 
 /**
  * Hace polling a /api/dashboard/kpis hasta que no haya datos en la BD,
  * o hasta agotar el tiempo máximo de espera.
@@ -173,7 +140,7 @@ function hideLogoutOverlay() {
  */
 async function waitForEmptyDb(oldToken, maxWaitMs = 8000, intervalMs = 600) {
   const start = Date.now();
-
+ 
   while (Date.now() - start < maxWaitMs) {
     try {
       // Intentamos con el token antiguo — en cuanto el servidor lo rechace (401)
@@ -184,22 +151,22 @@ async function waitForEmptyDb(oldToken, maxWaitMs = 8000, intervalMs = 600) {
           'Content-Type': 'application/json'
         }
       });
-
+ 
       // Sesión invalidada → datos borrados → podemos redirigir
       if (res.status === 401) return;
-
+ 
       const data = await res.json();
       if (data.productos_distintos === 0) return;
-
+ 
     } catch (_) {
       // Error de red → asumimos que está todo bien y redirigimos
       return;
     }
-
+ 
     // Esperar antes del siguiente intento
     await new Promise(r => setTimeout(r, intervalMs));
   }
-
+ 
   // Tiempo máximo agotado — redirigir igualmente
 }
  
