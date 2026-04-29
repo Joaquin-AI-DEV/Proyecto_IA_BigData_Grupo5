@@ -501,6 +501,12 @@ body {
   color: var(--text-muted);
   margin-top: 0.4rem;
 }
+
+.product-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
  
 /* Charts grid */
 .charts-grid {
@@ -780,6 +786,52 @@ body { transition: background 0.2s ease, color 0.2s ease; }
 .sidebar, .kpi-card, .chart-card, .modal, .team-card, .contact-form {
   transition: background 0.2s ease;
 }
+
+/* Modo oscuro — correcciones de elementos con colores hardcodeados */
+html.dark .static-page h1,
+html.dark .dashboard-header h2,
+html.dark .chart-card-title,
+html.dark .modal-header h2,
+html.dark .logout-title { color: var(--text); }
+
+html.dark .team-card h3 { color: var(--text); }
+
+html.dark .team-card-avatar {
+  background: var(--navy-light);
+  color: #ffffff;
+}
+
+html.dark .form-group label { color: var(--text); }
+
+html.dark .hero h1 { color: var(--text); }
+
+html.dark .navbar-links a.active {
+  color: #ffffff;
+  background: rgba(255,255,255,0.15);
+}
+
+html.dark .navbar-links a:hover {
+  color: #ffffff;
+  background: rgba(255,255,255,0.1);
+}
+
+html.dark .navbar-user { color: var(--text); }
+
+html.dark .btn-outline {
+  color: var(--text);
+  border-color: rgba(232,240,247,0.3);
+}
+html.dark .btn-outline:hover {
+  background: rgba(232,240,247,0.08);
+  border-color: rgba(232,240,247,0.6);
+}
+
+html.dark .sidebar-item.active {
+  background: rgba(29,185,84,0.15);
+  color: var(--green);
+}
+
+html.dark .kpi-value { color: var(--text); }
 
 /* Responsive */
 @media (max-width: 768px) {
