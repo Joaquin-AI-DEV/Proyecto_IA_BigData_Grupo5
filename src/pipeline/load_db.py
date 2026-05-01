@@ -7,8 +7,8 @@ Responsabilidad:
     Recibe los DataFrames limpios (productos y ventas) y los inserta
     en la base de datos Supabase usando psycopg2 (PostgreSQL).
 
-    También contiene la función de creación de tablas si no existen,
-    lo que permite arrancar el sistema desde cero con una sola ejecución.
+    También contiene la función de inicialización de tablas, que crea
+    las tablas si no existen y vacía su contenido antes de cada carga.
 
 Configuración necesaria (archivo environment/.env en la raíz del proyecto):
     DB_HOST     = <host de Supabase, p.ej. aws-0-eu-west-1.pooler.supabase.com>
@@ -22,6 +22,13 @@ Nota sobre Supabase:
     una instancia gratuita accesible remotamente, lo que facilita la
     integración con el dashboard y el modelo de predicción sin depender
     de que un servidor local esté levantado.
+
+Cambios Fase 3:
+    - create_tables() ya no hace DROP TABLE.
+      Ahora crea las tablas solo si no existen (CREATE TABLE IF NOT EXISTS)
+      y las vacía con TRUNCATE ... RESTART IDENTITY CASCADE antes de cada
+      carga. Esto preserva el esquema, los índices y las Foreign Keys, y
+      es la práctica estándar en pipelines de recarga completa.
 """
 
 import pandas as pd
@@ -30,18 +37,26 @@ from psycopg2.extras import execute_values
 
 def create_tables(conn) -> None:
     """
-    Recrea desde cero las tres tablas del modelo de datos.
+    Garantiza que las tres tablas del modelo existen y están vacías
+    antes de iniciar la carga.
 
-    Primero hace DROP TABLE IF EXISTS ... CASCADE para eliminar versiones
-    antiguas del esquema (por ejemplo si una ejecución previa creó
-    id_producto como INTEGER en lugar de VARCHAR) y a continuación las
-    crea con el esquema correcto. De esta forma el esquema del código
-    es siempre la única fuente de verdad.
+    Estrategia Fase 3 — TRUNCATE en lugar de DROP + CREATE:
+        En Fase 2 se usaba DROP TABLE ... CASCADE seguido de CREATE TABLE.
+        Eso funcionaba pero tenía dos inconvenientes:
+          1. Destruía el esquema (índices, constraints) en cada ejecución.
+          2. Era más lento porque PostgreSQL tenía que recompilar el catálogo.
 
-    Como el pipeline ya reescribe todo el dataset en cada ejecución,
-    borrar las tablas no supone pérdida de información real.
+        Ahora usamos:
+          - CREATE TABLE IF NOT EXISTS: crea la tabla solo la primera vez.
+          - TRUNCATE ... RESTART IDENTITY CASCADE: borra todos los datos,
+            reinicia los contadores SERIAL y respeta el orden de FK
+            (CASCADE vacía primero las tablas hijas).
 
-    Tablas creadas:
+        El resultado es el mismo desde el punto de vista del pipeline
+        (tablas siempre limpias antes de insertar) pero el esquema
+        permanece intacto entre ejecuciones.
+
+    Tablas gestionadas:
         - productos
         - ventas
         - predicciones (vacía, para uso del módulo de ML)
@@ -51,11 +66,8 @@ def create_tables(conn) -> None:
     """
 
     sql_create = """
-        -- Se eliminan antes de crear para garantizar el esquema correcto
-        DROP TABLE IF EXISTS predicciones, ventas, productos CASCADE;
-
         -- Tabla de productos (catálogo)
-        CREATE TABLE productos (
+        CREATE TABLE IF NOT EXISTS productos (
             id_producto     VARCHAR(20)     PRIMARY KEY,
             nombre          VARCHAR(255)    NOT NULL,
             categoria       VARCHAR(100)    DEFAULT 'Sin categoría',
@@ -63,7 +75,7 @@ def create_tables(conn) -> None:
         );
 
         -- Tabla de ventas (transacciones históricas)
-        CREATE TABLE ventas (
+        CREATE TABLE IF NOT EXISTS ventas (
             id_venta            SERIAL          PRIMARY KEY,
             id_venta_original   VARCHAR(20),
             id_producto         VARCHAR(20)     REFERENCES productos(id_producto),
@@ -73,7 +85,7 @@ def create_tables(conn) -> None:
         );
 
         -- Tabla de predicciones (la rellena el módulo ML de Deninson)
-        CREATE TABLE predicciones (
+        CREATE TABLE IF NOT EXISTS predicciones (
             id_prediccion       SERIAL          PRIMARY KEY,
             id_producto         VARCHAR(20)     REFERENCES productos(id_producto),
             fecha_prediccion    DATE            NOT NULL,
@@ -83,10 +95,25 @@ def create_tables(conn) -> None:
         );
     """
 
+    # TRUNCATE en orden inverso al de las FK para respetar la integridad
+    # referencial: primero las tablas hijas, luego la tabla padre.
+    # RESTART IDENTITY reinicia los contadores SERIAL (id_venta, id_prediccion).
+    # CASCADE propaga el vaciado a cualquier tabla que dependa de las anteriores.
+    sql_truncate = """
+        TRUNCATE TABLE predicciones, ventas, productos
+        RESTART IDENTITY CASCADE;
+    """
+
     with conn.cursor() as cur:
+        # Paso 1: crear tablas si no existen
         cur.execute(sql_create)
+        conn.commit()
+        print("[DB] Tablas verificadas (CREATE IF NOT EXISTS).")
+
+        # Paso 2: vaciar datos manteniendo el esquema intacto
+        cur.execute(sql_truncate)
     conn.commit()
-    print("[DB] Tablas recreadas desde cero: productos, ventas, predicciones.")
+    print("[DB] Tablas vaciadas con TRUNCATE RESTART IDENTITY CASCADE.")
 
 
 def insert_productos(conn, df_productos: pd.DataFrame) -> None:
