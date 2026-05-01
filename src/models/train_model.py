@@ -9,10 +9,17 @@ en compare_models.py, Ridge fue el ganador asi que aqui
 lo entrenamos, guardamos el modelo y exportamos las predicciones
 para que Jimmy las use en el dashboard.
 
-Modelo elegido: Ridge (alpha=10.0)
+Modelo elegido: Ridge regularizado con seleccion automatica de alpha
+mediante RidgeCV + TimeSeriesSplit (validacion temporal).
 Motivo: mejor RMSE, MAE y R2 en la comparacion. Ademas con
 un dataset tan pequeno (~220 dias de train) un modelo simple
 generaliza mejor que los ensemble.
+
+Mejora de precision (esta version):
+  - Features ciclicas (sen/cos) para dia_semana, mes y semana_anio.
+  - Lags estacionales 28/60/90 ademas de los cortos.
+  - delta_7 y ratio_7_30 para captar tendencia local.
+  - alpha elegido por validacion cruzada temporal en lugar de fijado a 10.
 """
 
 import os
@@ -24,8 +31,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import RidgeCV
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
 import joblib
 
@@ -38,16 +46,25 @@ DEFAULT_INPUT = os.path.join("data", "processed", "ventas_limpias.csv")
 RESULTS_DIR   = os.path.join("data", "results")
 MODEL_DIR     = os.path.join("src", "models", "saved")
 
-# --- El modelo ganador ---
-ALPHA = 10.0
-TEST_RATIO = 0.20
+# --- Hiperparametros del modelo ---
+# Rejilla de alphas que prueba RidgeCV; cubre desde casi-OLS hasta muy regularizado.
+ALPHAS = [0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0, 500.0]
+# 5 cortes temporales: cada fold entrena con el pasado y valida con el futuro inmediato.
+N_SPLITS_CV = 5
+TEST_RATIO  = 0.20
 
 FEATURES = [
-    "lag_1", "lag_3", "lag_7", "lag_14", "lag_21", "lag_30",
+    # Lags cortos (tendencia local) y estacionales (mensual/trimestral)
+    "lag_1", "lag_3", "lag_7", "lag_14", "lag_21", "lag_28", "lag_30", "lag_60", "lag_90",
+    # Medias y desviaciones moviles
     "media_3", "media_7", "media_14", "media_21", "media_30",
     "std_7", "std_14", "std_30",
-    "dia_semana", "dia_mes", "mes", "semana_anio", "trimestre",
-    "es_finde", "tendencia",
+    # Dinamica reciente
+    "delta_7", "ratio_7_30",
+    # Calendario no ciclico
+    "dia_mes", "trimestre", "es_finde", "tendencia",
+    # Calendario ciclico (sustituye a dia_semana/mes/semana_anio ordinales)
+    "dow_sin", "dow_cos", "mes_sin", "mes_cos", "woy_sin", "woy_cos",
 ]
 TARGET = "ventas"
 
@@ -108,10 +125,12 @@ def train_and_evaluate(train, test):
     X_train_sc = scaler.fit_transform(X_train)
     X_test_sc  = scaler.transform(X_test)
 
-    # Entrenamos
-    print(f"\nEntrenando Ridge (alpha={ALPHA})...")
-    modelo = Ridge(alpha=ALPHA)
+    # Entrenamos: RidgeCV elige el mejor alpha con TimeSeriesSplit,
+    # que respeta el orden temporal (entrena con pasado, valida con futuro).
+    print(f"\nEntrenando RidgeCV (alphas={ALPHAS}, cv=TimeSeriesSplit({N_SPLITS_CV}))...")
+    modelo = RidgeCV(alphas=ALPHAS, cv=TimeSeriesSplit(n_splits=N_SPLITS_CV))
     modelo.fit(X_train_sc, y_train)
+    print(f"  Mejor alpha seleccionado: {modelo.alpha_}")
 
     # Predicciones en escala real (deshacemos el log)
     y_pred_log  = modelo.predict(X_test_sc)
