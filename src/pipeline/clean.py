@@ -19,12 +19,14 @@ Responsabilidad:
       - df_productos: columnas del modelo Productos
       - df_ventas:    columnas del modelo Ventas
 
-Cambios Fase 3:
-    - split_productos_ventas() ahora acepta el parámetro min_ventas (default=5).
-      Los productos con menos de min_ventas transacciones se excluyen tanto del
-      catálogo como del histórico de ventas. Esto reduce ruido en el modelo de
-      predicción (SKUs con 1-2 ventas aisladas no aportan patrón temporal y
-      distorsionan las cuotas históricas).
+Cambios Fase 3 (actualizado):
+    - split_productos_ventas() acepta el parámetro min_ventas (default=5).
+      El criterio de filtrado es: se eliminan los productos que se hayan
+      vendido en MENOS de min_ventas DÍAS DISTINTOS durante el ÚLTIMO MES.
+      No se mide la cantidad de unidades vendidas, sino el número de días
+      diferentes en que hubo al menos una venta del producto.
+      Las unidades vendidas se mantienen intactas en df_ventas para que
+      el modelo de predicción pueda utilizarlas.
 """
 
 import pandas as pd
@@ -121,35 +123,49 @@ def split_productos_ventas(
       - Productos (catálogo único de productos)
       - Ventas (registros de transacciones)
 
-    Fase 3 — Filtro de productos con pocas ventas:
-        Los productos con menos de `min_ventas` transacciones se excluyen
-        del catálogo y del histórico. Motivo: SKUs con muy pocas apariciones
-        no tienen patrón temporal real; incluirlos añade ruido a las cuotas
-        históricas y empeora las predicciones del modelo.
+    Fase 3 (actualizado) — Filtro por días distintos en el último mes:
+        Se eliminan los productos que se hayan vendido en menos de
+        `min_ventas` DÍAS DISTINTOS durante el ÚLTIMO MES del dataset.
+        No se mide la cantidad de unidades vendidas, sino cuántos días
+        diferentes tuvo al menos una venta ese producto.
+        Las unidades vendidas se mantienen intactas en df_ventas para
+        que el modelo de predicción pueda utilizarlas correctamente.
 
     Parámetros:
         df (pd.DataFrame): DataFrame limpio devuelto por clean_and_normalize().
-        min_ventas (int): Número mínimo de transacciones para que un producto
-                          se incluya en el dataset final. Por defecto 5.
+        min_ventas (int): Número mínimo de días distintos con venta en el
+                          último mes para que un producto se incluya en el
+                          dataset final. Por defecto 5.
 
     Retorna:
         tuple: (df_productos, df_ventas)
     """
 
-    # --- Filtro de productos con pocas ventas ---
-    # Contamos cuántas transacciones tiene cada producto en el dataset limpio.
-    conteo_ventas = df.groupby("id_producto").size().rename("num_ventas")
+    # --- Filtro de productos por días distintos en el último mes ---
+    # Calculamos la fecha máxima del dataset como referencia de "hoy".
+    fecha_max = pd.to_datetime(df["fecha_venta"]).max()
+    fecha_inicio_mes = fecha_max - pd.DateOffset(months=1)
 
-    # Nos quedamos solo con los IDs que superan el umbral mínimo.
-    productos_validos = conteo_ventas[conteo_ventas >= min_ventas].index
+    # Filtramos solo las filas del último mes para contar días distintos.
+    df_ultimo_mes = df[pd.to_datetime(df["fecha_venta"]) >= fecha_inicio_mes]
+
+    # Contamos cuántos días distintos se vendió cada producto en ese mes.
+    dias_distintos = (
+        df_ultimo_mes.groupby("id_producto")["fecha_venta"]
+        .nunique()
+        .rename("dias_vendido")
+    )
+
+    # Nos quedamos solo con los productos que superan el umbral mínimo.
+    productos_validos = dias_distintos[dias_distintos >= min_ventas].index
 
     filas_antes = len(df)
     df = df[df["id_producto"].isin(productos_validos)]
-    productos_filtrados = conteo_ventas[conteo_ventas < min_ventas].shape[0]
+    productos_filtrados_n = dias_distintos[dias_distintos < min_ventas].shape[0]
 
     print(
-        f"[SPLIT] Filtro min_ventas={min_ventas}: "
-        f"{productos_filtrados} productos excluidos por pocas ventas. "
+        f"[SPLIT] Filtro min_ventas={min_ventas} días distintos (último mes): "
+        f"{productos_filtrados_n} productos excluidos. "
         f"Filas restantes: {len(df)} (de {filas_antes})."
     )
 
