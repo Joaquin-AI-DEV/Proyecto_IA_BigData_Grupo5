@@ -4,6 +4,38 @@
  */
  
 const charts = {};
+
+// ─── MODO OSCURO ─────────────────────────────────────────────────────────────
+
+function initDarkMode() {
+  const isReload = performance.getEntriesByType('navigation')[0]?.type === 'reload';
+  
+  if (isReload) {
+    sessionStorage.removeItem('darkMode');
+    document.documentElement.classList.remove('dark');
+  } else {
+    const saved = sessionStorage.getItem('darkMode');
+    if (saved === 'true') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  }
+  
+  renderDarkToggle();
+}
+
+function toggleDarkMode() {
+  const isDark = document.documentElement.classList.toggle('dark');
+  sessionStorage.setItem('darkMode', String(isDark));
+  renderDarkToggle();
+  if (charts['chartSeguridad']) charts['chartSeguridad'].update();
+}
+
+function renderDarkToggle() {
+  const btn = document.getElementById('darkModeBtn');
+  if (!btn) return;
+  const isDark = document.documentElement.classList.contains('dark');
+  btn.textContent = isDark ? '☀' : '☾';
+  btn.title = isDark ? 'Modo claro' : 'Modo oscuro';
+}
  
 // ─── MODALES (overlay de logout + modal de login) ───────────────────────────
 // Se inyectan directamente en <body> para garantizar que el z-index funciona
@@ -131,7 +163,7 @@ async function logout() {
  
   window.location.href = '/frontend/index.html';
 }
- 
+
 /**
  * Hace polling a /api/dashboard/kpis hasta que no haya datos en la BD,
  * o hasta agotar el tiempo máximo de espera.
@@ -340,14 +372,26 @@ async function loadDashboard() {
  
     const selector = document.getElementById('globalProductSelector');
     selector.innerHTML = '';
-    productos.forEach(p => {
-      const opt       = document.createElement('option');
-      opt.value       = p.id_producto;
-      opt.textContent = `${p.id_producto} — ${p.nombre.substring(0, 40)}`;
+
+    if (productos.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Lista vacía — carga un archivo primero';
+      opt.disabled = true;
       selector.appendChild(opt);
-    });
- 
-    if (productos.length > 0) await updateAllCharts();
+      renderEmptyChart('chartVentasMes', 'Sin datos de ventas');
+      renderEmptyChart('chartPrediccion', 'Sin predicciones disponibles');
+      renderEmptyChart('chartInversion', 'Sin datos de inversión');
+      renderDoughnut('chartSeguridad', 0);
+    } else {
+      productos.forEach(p => {
+        const opt       = document.createElement('option');
+        opt.value       = p.id_producto;
+        opt.textContent = `${p.id_producto} — ${p.nombre.substring(0, 40)}`;
+        selector.appendChild(opt);
+      });
+      await updateAllCharts();
+    }
  
     loading.classList.remove('show');
     content.style.display = 'block';
@@ -422,20 +466,74 @@ function renderChart(canvasId, data) {
 function renderDoughnut(canvasId, confianzaPct) {
   if (charts[canvasId]) charts[canvasId].destroy();
   const ctx = document.getElementById(canvasId).getContext('2d');
+  const pct = confianzaPct || 0;
+
+  // Plugin para mostrar el porcentaje en el centro del doughnut
+  const centerTextPlugin = {
+    id: 'centerText',
+    beforeDraw(chart) {
+      const { width, height, ctx } = chart;
+      ctx.restore();
+      const fontSize = (height / 100).toFixed(2);
+      ctx.font = `bold ${fontSize}em DM Sans, sans-serif`;
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = document.documentElement.classList.contains('dark') ? '#e8f0f7' : '#0d1b2a';
+      const text = pct.toFixed(1) + '%';
+      const textX = Math.round((width - ctx.measureText(text).width) / 2);
+      const textY = height / 2;
+      ctx.fillText(text, textX, textY);
+      ctx.save();
+    }
+  };
+
   charts[canvasId] = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels: ['Confianza', 'Margen de error'],
-      datasets: [{ data: [confianzaPct, 100 - confianzaPct],
+      datasets: [{ data: [pct, 100 - pct],
         backgroundColor: ['#1db954', '#dce4ed'], borderWidth: 0 }]
     },
     options: {
-      responsive: true, cutout: '70%',
+      responsive: true, cutout: '72%',
       plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
-    }
+    },
+    plugins: [centerTextPlugin]
+  });
+
+  setTimeout(() => { if (charts[canvasId]) charts[canvasId].update(); }, 100);
+}
+
+// Muestra una gráfica vacía con mensaje cuando no hay datos
+function renderEmptyChart(canvasId, mensaje = 'Sin datos') {
+  if (charts[canvasId]) charts[canvasId].destroy();
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type: 'line',
+    data: { labels: [''], datasets: [{ data: [null], borderColor: 'transparent' }] },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { display: false } },
+        y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { display: false } }
+      }
+    },
+    plugins: [{
+      id: 'emptyMessage',
+      beforeDraw(chart) {
+        const { width, height, ctx } = chart;
+        ctx.restore();
+        ctx.font = '14px DM Sans, sans-serif';
+        ctx.fillStyle = '#a0aec0';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(mensaje, width / 2, height / 2);
+        ctx.save();
+      }
+    }]
   });
 }
- 
+
 // ─── SIDEBAR TABS ────────────────────────────────────────────────────────────
  
 function showDashboardTab(tab) {
@@ -456,3 +554,6 @@ function hideAlert(id) {
   const el = document.getElementById(id);
   if (el) el.classList.remove('show');
 }
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+initDarkMode();
