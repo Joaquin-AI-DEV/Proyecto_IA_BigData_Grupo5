@@ -3,60 +3,44 @@ import numpy as np
 
 def build_features(df):
     """
-    Aqui creamos todas las features que le damos al modelo
-    para que aprenda los patrones de ventas.
-    """
-    df = df.sort_values("fecha")
+    Genera las features mensuales que ve el modelo.
 
-    # -- Lags: ventas de dias anteriores para que el modelo sepa que paso antes --
-    # Cortos (1-30) para tendencia local; largos (28-90) para estacionalidad mensual.
-    for lag in [1, 3, 7, 14, 21, 30, 28, 60, 90]:
+    Importante: todas las features derivadas de 'ventas' usan shift(1)
+    o lags >=1, asi nunca incluimos el valor del mes que estamos
+    intentando predecir (sin data leakage).
+    """
+    df = df.sort_values("fecha").reset_index(drop=True)
+
+    # -- Lags mensuales: ventas de meses anteriores --
+    # 1, 2, 3 capturan tendencia corta; 12 capturaria estacionalidad anual
+    # pero con solo ~13 meses de historico no es viable, asi que lo omitimos.
+    for lag in [1, 2, 3]:
         df[f"lag_{lag}"] = df["ventas"].shift(lag)
 
-    # -- Medias moviles: para suavizar y ver tendencias --
-    for win in [3, 7, 14, 21, 30]:
-        df[f"media_{win}"] = df["ventas"].rolling(win).mean()
+    # -- Medias moviles con shift(1) para evitar leakage --
+    # rolling(N).mean() incluiria el mes actual en la ventana, lo desplazamos
+    # para que la media solo use meses estrictamente anteriores.
+    for win in [3]:
+        df[f"media_{win}"] = df["ventas"].shift(1).rolling(win).mean()
 
-    # -- Desviacion estandar movil: mide cuanto varian las ventas --
-    for win in [7, 14, 30]:
-        df[f"std_{win}"] = df["ventas"].rolling(win).std()
+    # -- Calendario (no dependen del target, no hay leakage posible) --
+    df["mes"]       = df["fecha"].dt.month
+    df["trimestre"] = df["fecha"].dt.quarter
 
-    # -- Diferencia respecto a hace 7 dias y ratio tendencia corta vs larga --
-    df["delta_7"]     = df["ventas"] - df["lag_7"]
-    df["ratio_7_30"]  = df["media_7"] / df["media_30"].replace(0, np.nan)
+    # Tendencia: numero de meses desde el inicio de la serie
+    df["tendencia"] = np.arange(len(df))
 
-    # -- Cosas del calendario --
-    df["dia_semana"]  = df["fecha"].dt.dayofweek
-    df["dia_mes"]     = df["fecha"].dt.day
-    df["mes"]         = df["fecha"].dt.month
-    df["semana_anio"] = df["fecha"].dt.isocalendar().week.astype(int)
-    df["trimestre"]   = df["fecha"].dt.quarter
-    df["es_finde"]    = df["dia_semana"].isin([5, 6]).astype(int)
-
-    # Encoding ciclico (sen/cos) para que un modelo lineal entienda
-    # que diciembre esta cerca de enero y domingo cerca de lunes.
-    df["dow_sin"]  = np.sin(2 * np.pi * df["dia_semana"]  / 7)
-    df["dow_cos"]  = np.cos(2 * np.pi * df["dia_semana"]  / 7)
-    df["mes_sin"]  = np.sin(2 * np.pi * df["mes"]         / 12)
-    df["mes_cos"]  = np.cos(2 * np.pi * df["mes"]         / 12)
-    df["woy_sin"]  = np.sin(2 * np.pi * df["semana_anio"] / 52)
-    df["woy_cos"]  = np.cos(2 * np.pi * df["semana_anio"] / 52)
-
-    # -- Tendencia: cuantos dias han pasado desde el inicio --
-    df["tendencia"] = (df["fecha"] - df["fecha"].min()).dt.days
-
-    # Quitamos las filas que tienen NaN por los shifts y rollings
-    df = df.dropna()
+    # Filas sin lags suficientes (los primeros meses) se descartan
+    df = df.dropna().reset_index(drop=True)
 
     return df
 
 
 def tratar_outliers(df, columna="ventas"):
     """
-    Los outliers nos fastidian el modelo, asi que los capeamos.
-    Usamos el metodo IQR: si un valor se pasa mucho del rango normal,
-    lo recortamos al limite. Asi no perdemos filas pero tampoco
-    nos distorsionan las predicciones.
+    Capeo IQR de outliers. A nivel mensual hay muy pocos puntos asi que
+    raramente activa, pero lo dejamos por consistencia con el resto del
+    proyecto y por si en el futuro se amplia el historico.
     """
     q1 = df[columna].quantile(0.25)
     q3 = df[columna].quantile(0.75)
@@ -65,11 +49,10 @@ def tratar_outliers(df, columna="ventas"):
     limite_bajo = q1 - 1.5 * iqr
     limite_alto = q3 + 1.5 * iqr
 
-    antes = len(df[(df[columna] < limite_bajo) | (df[columna] > limite_alto)])
-    print(f"  Outliers detectados: {antes}")
+    detectados = len(df[(df[columna] < limite_bajo) | (df[columna] > limite_alto)])
+    print(f"  Outliers detectados: {detectados}")
     print(f"  Rango permitido: [{limite_bajo:.0f}, {limite_alto:.0f}]")
 
-    # Capeamos en vez de eliminar (clip), para no perder dias
     df[columna] = df[columna].clip(lower=limite_bajo, upper=limite_alto)
 
     return df
@@ -77,10 +60,9 @@ def tratar_outliers(df, columna="ventas"):
 
 def aplicar_log(df, columna="ventas"):
     """
-    Aplicamos log1p a las ventas para que la distribucion sea mas normal.
-    log1p es log(1+x) para evitar problemas con el 0.
-    Esto ayuda a que los modelos entrenen mejor cuando los datos estan
-    muy sesgados (muchos valores bajos y pocos muy altos).
+    log1p para reducir el sesgo de la distribucion. Las ventas mensuales
+    son grandes en magnitud (decenas de miles de unidades) y la transformacion
+    estabiliza la varianza, ayudando a Ridge.
     """
     print(f"  Skewness antes del log: {df[columna].skew():.2f}")
     df[columna] = np.log1p(df[columna])
