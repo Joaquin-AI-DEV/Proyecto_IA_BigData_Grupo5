@@ -19,6 +19,26 @@
   --radius: 12px;
   --radius-sm: 8px;
   --transition: 0.2s ease;
+  --card-bg: #ffffff;
+}
+
+/* Variables — modo oscuro */
+html.dark {
+  --bg: #0f1923;
+  --white: #1a2535;
+  --navy: #0a1220;
+  --navy-mid: #0f1c2e;
+  --navy-light: #1a2e45;
+  --green: #1db954;
+  --green-dark: #17a347;
+  --green-soft: #0d2e1a;
+  --text: #e8f0f7;
+  --text-muted: #7a9ab5;
+  --border: #1e3248;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+  --card-bg: #152030;
 }
  
 /* Reset */
@@ -112,6 +132,24 @@ body {
   font-weight: 700;
   color: var(--white);
 }
+
+/* Botón modo oscuro */
+.dark-mode-btn {
+  background: transparent;
+  border: 1.5px solid rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.75);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  flex-shrink: 0;
+}
+.dark-mode-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
  
 /* Botones */
 .btn {
@@ -463,6 +501,12 @@ body {
   color: var(--text-muted);
   margin-top: 0.4rem;
 }
+
+.product-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
  
 /* Charts grid */
 .charts-grid {
@@ -736,6 +780,58 @@ canvas { max-height: 220px; }
   75%  { content: '...'; }
   100% { content: '';    }
 }
+
+/* Modo oscuro — transición suave */
+body { transition: background 0.2s ease, color 0.2s ease; }
+.sidebar, .kpi-card, .chart-card, .modal, .team-card, .contact-form {
+  transition: background 0.2s ease;
+}
+
+/* Modo oscuro — correcciones de elementos con colores hardcodeados */
+html.dark .static-page h1,
+html.dark .dashboard-header h2,
+html.dark .chart-card-title,
+html.dark .modal-header h2,
+html.dark .logout-title { color: var(--text); }
+
+html.dark .team-card h3 { color: var(--text); }
+
+html.dark .team-card-avatar {
+  background: var(--navy-light);
+  color: #ffffff;
+}
+
+html.dark .form-group label { color: var(--text); }
+
+html.dark .hero h1 { color: var(--text); }
+
+html.dark .navbar-links a.active {
+  color: #ffffff;
+  background: rgba(255,255,255,0.15);
+}
+
+html.dark .navbar-links a:hover {
+  color: #ffffff;
+  background: rgba(255,255,255,0.1);
+}
+
+html.dark .navbar-user { color: var(--text); }
+
+html.dark .btn-outline {
+  color: var(--text);
+  border-color: rgba(232,240,247,0.3);
+}
+html.dark .btn-outline:hover {
+  background: rgba(232,240,247,0.08);
+  border-color: rgba(232,240,247,0.6);
+}
+
+html.dark .sidebar-item.active {
+  background: rgba(29,185,84,0.15);
+  color: var(--green);
+}
+
+html.dark .kpi-value { color: var(--text); }
 
 /* Responsive */
 @media (max-width: 768px) {
