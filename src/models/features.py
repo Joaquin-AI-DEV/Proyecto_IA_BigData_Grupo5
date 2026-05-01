@@ -9,7 +9,8 @@ def build_features(df):
     df = df.sort_values("fecha")
 
     # -- Lags: ventas de dias anteriores para que el modelo sepa que paso antes --
-    for lag in [1, 3, 7, 14, 21, 30]:
+    # Cortos (1-30) para tendencia local; largos (28-90) para estacionalidad mensual.
+    for lag in [1, 3, 7, 14, 21, 30, 28, 60, 90]:
         df[f"lag_{lag}"] = df["ventas"].shift(lag)
 
     # -- Medias moviles: para suavizar y ver tendencias --
@@ -20,6 +21,10 @@ def build_features(df):
     for win in [7, 14, 30]:
         df[f"std_{win}"] = df["ventas"].rolling(win).std()
 
+    # -- Diferencia respecto a hace 7 dias y ratio tendencia corta vs larga --
+    df["delta_7"]     = df["ventas"] - df["lag_7"]
+    df["ratio_7_30"]  = df["media_7"] / df["media_30"].replace(0, np.nan)
+
     # -- Cosas del calendario --
     df["dia_semana"]  = df["fecha"].dt.dayofweek
     df["dia_mes"]     = df["fecha"].dt.day
@@ -27,6 +32,15 @@ def build_features(df):
     df["semana_anio"] = df["fecha"].dt.isocalendar().week.astype(int)
     df["trimestre"]   = df["fecha"].dt.quarter
     df["es_finde"]    = df["dia_semana"].isin([5, 6]).astype(int)
+
+    # Encoding ciclico (sen/cos) para que un modelo lineal entienda
+    # que diciembre esta cerca de enero y domingo cerca de lunes.
+    df["dow_sin"]  = np.sin(2 * np.pi * df["dia_semana"]  / 7)
+    df["dow_cos"]  = np.cos(2 * np.pi * df["dia_semana"]  / 7)
+    df["mes_sin"]  = np.sin(2 * np.pi * df["mes"]         / 12)
+    df["mes_cos"]  = np.cos(2 * np.pi * df["mes"]         / 12)
+    df["woy_sin"]  = np.sin(2 * np.pi * df["semana_anio"] / 52)
+    df["woy_cos"]  = np.cos(2 * np.pi * df["semana_anio"] / 52)
 
     # -- Tendencia: cuantos dias han pasado desde el inicio --
     df["tendencia"] = (df["fecha"] - df["fecha"].min()).dt.days
