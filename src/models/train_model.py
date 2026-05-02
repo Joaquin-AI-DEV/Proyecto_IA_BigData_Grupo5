@@ -3,24 +3,27 @@ train_model.py
 Proyecto StockPulse - Grupo 5
 Autor: Deninson Tapia
 
-Modelo definitivo: Ridge regularizado sobre ventas agregadas a frecuencia
-MENSUAL. Esta version corrige problemas de la iteracion anterior:
+Modelo definitivo: Ridge regularizado sobre ventas mensuales agregadas.
+Producto del modelo (segun requisito del equipo): 12 predicciones para los
+12 meses del ano siguiente al ultimo dato disponible (YYYY+1).
 
-  1. Sin data leakage: las medias moviles usan shift(1), de modo que ninguna
-     feature incluye el valor del mes que estamos prediciendo.
-  2. Prediccion mensual, no diaria: el orquestador del pipeline pedia
-     "predecir el proximo mes", asi que agregamos por mes (MS) en lugar de
-     por dia. La metrica reportada es la del mes completo.
-  3. Eliminamos el ultimo mes si esta incompleto, para no contaminar la
-     metrica con un punto basado en pocos dias.
-  4. Modelo simple (Ridge alpha=10) coherente con el tamano del dataset
-     (~12 meses utiles, sumamente pocos para algo mas complejo).
+Pasos:
+  1. Backtest: split temporal 80/20, alpha tuneado por TimeSeriesSplit +
+     GridSearchCV, metricas RMSE/MAE/R^2 sobre el test (escala real).
+     R^2 << 1.0 confirma que no hay data leakage.
+  2. Refit: Ridge se reentrena sobre toda la serie historica con la
+     misma estrategia de tuneo (alpha por CV temporal).
+  3. Forecast recursivo: se generan predicciones mes a mes hasta
+     diciembre de YYYY+1. Cada paso usa los ultimos 3 valores
+     (historicos o ya predichos) como lags. Se descarta cualquier
+     mes intermedio que pertenezca al ano historico (p.ej. el ultimo
+     mes incompleto que se descarto en load_and_aggregate).
 
 Salidas:
-  - src/models/saved/ridge_model.pkl
+  - src/models/saved/ridge_model.pkl   (modelo refit sobre todos los datos)
   - src/models/saved/scaler.pkl
-  - data/results/predicciones_ridge.csv (fecha mensual, real, predicho)
-  - data/results/prediccion_ridge.png
+  - data/results/predicciones_ridge.csv (12 filas, una por mes de YYYY+1)
+  - data/results/prediccion_ridge.png   (historico real + forecast)
 """
 
 import os
@@ -35,6 +38,7 @@ import matplotlib.dates as mdates
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 import joblib
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -47,35 +51,28 @@ RESULTS_DIR   = os.path.join("data", "results")
 MODEL_DIR     = os.path.join("src", "models", "saved")
 
 # --- Hiperparametros ---
-# Ridge con alpha=10: misma regularizacion que el modelo de Fase 2,
-# adecuada para un dataset pequeno (regularizacion fuerte evita overfit).
-ALPHA = 10.0
-# 80/20 temporal. Con 9-12 meses utiles esto deja 2-3 meses de test.
+ALPHA_GRID = [0.01, 0.1, 1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 1000.0]
+ALPHA = 10.0  # fallback cuando hay menos de 6 meses utiles
 TEST_RATIO = 0.20
 
 FEATURES = [
     "lag_1", "lag_2", "lag_3",
-    "media_3",
+    "media_3", "std_3", "diff_1",
     "mes", "trimestre", "tendencia",
+    "mes_sin", "mes_cos",
 ]
 TARGET = "ventas"
 
 
 def load_and_aggregate(filepath):
     """
-    Carga el CSV de ventas limpias y agrega a frecuencia mensual.
-
-    Pasos:
-      1. Lee el CSV (granularidad: una fila por linea de venta).
-      2. Suma las unidades vendidas por dia.
-      3. Resamplea a inicio de mes (MS) sumando los dias.
-      4. Descarta el ultimo mes si tiene menos de 25 dias de cobertura,
-         para no introducir un punto sesgado a la baja.
+    Carga el CSV de ventas limpias y agrega a frecuencia mensual (MS),
+    descartando meses con cobertura < 25 dias para no introducir un mes
+    incompleto sesgado a la baja.
     """
     print(f"Cargando dataset: {filepath}")
     df = pd.read_csv(filepath, parse_dates=["fecha_venta"], low_memory=False)
 
-    # Sumar a nivel diario primero (asi controlamos cobertura por mes)
     daily = (
         df.groupby("fecha_venta")["unidades_vendidas"]
         .sum()
@@ -85,10 +82,8 @@ def load_and_aggregate(filepath):
         .sort_index()
     )
 
-    # Cobertura: cuantos dias distintos hay en cada mes
     dias_por_mes = daily.resample("MS").apply(lambda s: s.shape[0])
 
-    # Suma mensual de unidades
     mensual = (
         daily.resample("MS")["ventas"]
         .sum()
@@ -96,7 +91,6 @@ def load_and_aggregate(filepath):
         .reset_index()
     )
 
-    # Descartar meses con cobertura < 25 dias (el ultimo mes incompleto)
     cobertura = dias_por_mes["ventas"].reset_index(drop=True)
     mensual = mensual[cobertura >= 25].reset_index(drop=True)
 
@@ -106,9 +100,7 @@ def load_and_aggregate(filepath):
 
 
 def prepare_data(df):
-    """
-    Outliers -> log -> features -> split temporal.
-    """
+    """Outliers -> log -> features -> split temporal 80/20."""
     print("\n--- Preprocesamiento ---")
 
     print("Tratando outliers:")
@@ -130,9 +122,45 @@ def prepare_data(df):
     return train, test
 
 
-def train_and_evaluate(train, test):
-    """Entrena Ridge y evalua sobre el conjunto de test mensual."""
+def _select_ridge(X_sc, y):
+    """
+    Selecciona alpha por TimeSeriesSplit + GridSearchCV.
+    Fallback a alpha=10 cuando hay <6 meses (CV deja de ser fiable).
+    """
+    n = len(X_sc)
 
+    if n < 6:
+        print(f"  Pocos meses ({n}): Ridge(alpha={ALPHA}) sin CV.")
+        modelo = Ridge(alpha=ALPHA)
+        modelo.fit(X_sc, y)
+        return modelo, ALPHA
+
+    n_splits = min(4, max(2, n - 2))
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+
+    grid = GridSearchCV(
+        estimator=Ridge(),
+        param_grid={"alpha": ALPHA_GRID},
+        scoring="neg_root_mean_squared_error",
+        cv=tscv,
+        n_jobs=1,
+    )
+    print(f"  GridSearchCV Ridge alpha (TimeSeriesSplit, n_splits={n_splits})...")
+    grid.fit(X_sc, y)
+
+    alpha_sel = grid.best_params_["alpha"]
+    cv_rmse   = -grid.best_score_
+    print(f"  alpha optimo: {alpha_sel}  |  RMSE CV (log): {cv_rmse:.4f}")
+
+    return grid.best_estimator_, alpha_sel
+
+
+def train_and_evaluate(train, test):
+    """
+    Backtest sobre el split temporal: entrena en train, evalua en test.
+    Las metricas reportadas son la prueba de que el modelo no tiene
+    leakage (R^2 muy por debajo de 1.0 sobre datos no vistos).
+    """
     X_train, y_train = train[FEATURES], train[TARGET]
     X_test,  y_test  = test[FEATURES],  test[TARGET]
 
@@ -140,11 +168,9 @@ def train_and_evaluate(train, test):
     X_train_sc = scaler.fit_transform(X_train)
     X_test_sc  = scaler.transform(X_test)
 
-    print(f"\nEntrenando Ridge (alpha={ALPHA})...")
-    modelo = Ridge(alpha=ALPHA)
-    modelo.fit(X_train_sc, y_train)
+    print("\n--- Backtest (entrena en train, evalua en test) ---")
+    modelo, _ = _select_ridge(X_train_sc, y_train)
 
-    # Deshacer log para reportar metricas en escala de unidades reales
     y_pred_log  = modelo.predict(X_test_sc)
     y_pred_real = np.expm1(np.clip(y_pred_log, 0, None))
     y_test_real = np.expm1(y_test)
@@ -153,34 +179,115 @@ def train_and_evaluate(train, test):
     mae  = mean_absolute_error(y_test_real, y_pred_real)
     r2   = r2_score(y_test_real, y_pred_real)
 
-    print(f"\n--- Resultados modelo definitivo (mensual) ---")
     print(f"  RMSE: {rmse:.2f}")
     print(f"  MAE:  {mae:.2f}")
     print(f"  R2:   {r2:.4f}")
+    if r2 > 0.99:
+        print("  [WARN] R2 sospechosamente alto: revisar leakage en features.")
 
     return modelo, scaler, y_test_real, y_pred_real, test["fecha"]
 
 
+def _refit_full(df_all):
+    """Reentrena Ridge sobre TODOS los meses utiles (post-features)."""
+    X_all, y_all = df_all[FEATURES], df_all[TARGET]
+    scaler_full = StandardScaler()
+    X_all_sc = scaler_full.fit_transform(X_all)
+    print("\n--- Refit sobre todos los meses utiles ---")
+    modelo_full, alpha_sel = _select_ridge(X_all_sc, y_all)
+    return modelo_full, scaler_full, alpha_sel
+
+
+def _build_row_features(ventas_log, fecha_step, tendencia):
+    """
+    Replica build_features pero para UNA sola fila futura, sin pasar por
+    dropna. Mantiene 1:1 las definiciones de features.py.
+    """
+    return {
+        "lag_1":     ventas_log[-1],
+        "lag_2":     ventas_log[-2],
+        "lag_3":     ventas_log[-3],
+        "media_3":   float(np.mean(ventas_log[-3:])),
+        "std_3":     float(np.std(ventas_log[-3:], ddof=1)),
+        "diff_1":    ventas_log[-1] - ventas_log[-2],
+        "mes":       int(fecha_step.month),
+        "trimestre": (int(fecha_step.month) - 1) // 3 + 1,
+        "tendencia": int(tendencia),
+        "mes_sin":   float(np.sin(2 * np.pi * fecha_step.month / 12.0)),
+        "mes_cos":   float(np.cos(2 * np.pi * fecha_step.month / 12.0)),
+    }
+
+
+def _forecast_year_plus_1(df_all, modelo, scaler):
+    """
+    Forecast recursivo: produce predicciones para los 12 meses de YYYY+1,
+    donde YYYY es el ano del ultimo mes con datos historicos.
+
+    df_all: DataFrame post-features y post-log con columna 'ventas' en
+    escala log (lo que sale de prepare_data + concat).
+    """
+    df_all = df_all.sort_values("fecha").reset_index(drop=True)
+    ventas_log = list(df_all[TARGET].values)
+    last_date = pd.Timestamp(df_all["fecha"].iloc[-1])
+    target_year = int(last_date.year) + 1
+    next_tend = int(df_all["tendencia"].iloc[-1]) + 1
+
+    # Generar fechas mensuales desde el siguiente mes hasta diciembre de YYYY+1.
+    # Se predicen tambien los meses intermedios del ano historico (si los hay)
+    # solo como pasos para alimentar los lags del primer mes de YYYY+1.
+    fechas_iter = []
+    fecha = (last_date + pd.offsets.MonthBegin(1)).normalize()
+    while fecha.year <= target_year:
+        fechas_iter.append(fecha)
+        fecha = fecha + pd.offsets.MonthBegin(1)
+
+    rows = []
+    for fecha_step in fechas_iter:
+        feats = _build_row_features(ventas_log, fecha_step, next_tend)
+        X_new = pd.DataFrame([feats], columns=FEATURES)
+        X_new_sc = scaler.transform(X_new)
+        y_log = float(modelo.predict(X_new_sc)[0])
+        y_log = max(0.0, y_log)  # clip para evitar valores negativos en log
+        ventas_log.append(y_log)
+        next_tend += 1
+        rows.append({
+            "fecha":            fecha_step,
+            "ventas_predichas": float(np.expm1(y_log)),
+        })
+
+    df_forecast = pd.DataFrame(rows)
+    df_year = df_forecast[df_forecast["fecha"].dt.year == target_year].reset_index(drop=True)
+
+    if len(df_year) != 12:
+        print(f"  [WARN] Esperaba 12 meses para {target_year}, hay {len(df_year)}.")
+
+    return df_year[["fecha", "ventas_predichas"]]
+
+
 def save_model(modelo, scaler):
     os.makedirs(MODEL_DIR, exist_ok=True)
-
     model_path  = os.path.join(MODEL_DIR, "ridge_model.pkl")
     scaler_path = os.path.join(MODEL_DIR, "scaler.pkl")
-
     joblib.dump(modelo, model_path)
     joblib.dump(scaler, scaler_path)
-
     print(f"\nModelo guardado en: {model_path}")
     print(f"Scaler guardado en: {scaler_path}")
 
 
 def save_predictions(fechas, y_real, y_pred):
+    """
+    Guarda CSV de predicciones (12 filas, una por mes de YYYY+1).
+    Acepta tanto Series como listas/arrays para mantener compatibilidad.
+    """
     os.makedirs(RESULTS_DIR, exist_ok=True)
+    fechas_arr = list(fechas.values) if hasattr(fechas, "values") else list(fechas)
+    y_real_arr = list(y_real.values) if hasattr(y_real, "values") else list(y_real)
+    y_pred_arr = list(y_pred.values) if hasattr(y_pred, "values") else list(y_pred)
 
     df_pred = pd.DataFrame({
-        "fecha":            fechas.values,
-        "ventas_reales":    y_real.values,
-        "ventas_predichas": y_pred,
+        "fecha":            fechas_arr,
+        "ventas_reales":    y_real_arr,
+        "ventas_predichas": y_pred_arr,
     })
 
     pred_path = os.path.join(RESULTS_DIR, "predicciones_ridge.csv")
@@ -188,17 +295,16 @@ def save_predictions(fechas, y_real, y_pred):
     print(f"Predicciones guardadas en: {pred_path}")
 
 
-def plot_results(fechas, y_real, y_pred):
-    """Grafica mensual: real vs prediccion."""
+def plot_results(fechas_hist, y_hist_real, fechas_fut, y_fut_pred):
+    """Grafica: serie historica real + forecast 12 meses YYYY+1."""
     fig, ax = plt.subplots(figsize=(13, 5))
 
-    ax.plot(fechas, y_real.values, label="Real", color="black",
+    ax.plot(fechas_hist, y_hist_real, label="Historico (real)", color="black",
             linewidth=2, marker="o")
-    ax.plot(fechas, y_pred, label="Ridge (prediccion)", color="#e74c3c",
+    ax.plot(fechas_fut, y_fut_pred, label="Forecast 12 meses (Ridge)", color="#e74c3c",
             linestyle="--", linewidth=2, marker="s")
 
-    ax.set_title("Modelo definitivo (Ridge, mensual) - Prediccion vs Ventas reales",
-                 fontsize=13)
+    ax.set_title("Forecast 12 meses YYYY+1 sobre la serie historica", fontsize=13)
     ax.set_xlabel("Mes")
     ax.set_ylabel("Unidades vendidas (mes)")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
@@ -216,23 +322,61 @@ def plot_results(fechas, y_real, y_pred):
 
 def run_training(filepath):
     """
-    Pipeline completo de entrenamiento. Devuelve el DataFrame de
-    predicciones (fecha mensual, ventas_reales, ventas_predichas) que
-    consume el orquestador del pipeline.
+    Pipeline completo: backtest -> refit -> forecast YYYY+1.
+
+    Devuelve un DataFrame de 12 filas (una por mes de YYYY+1) con columnas
+    (fecha, ventas_reales, ventas_predichas). Lo consume run_pipeline.py
+    para hacer cross-merge por SKU (cuota historica) y obtener 12
+    predicciones por producto.
+
+    Para los meses futuros NO existen ventas reales, asi que
+    ventas_reales = ventas_predichas como placeholder (es la unica
+    convencion compatible con el orquestador actual). La metrica honesta
+    del modelo se imprime en el bloque de Backtest, justo antes del refit:
+    si ese R^2 fuera ~1.0 seria senal de leakage.
     """
     df_monthly = load_and_aggregate(filepath)
     train, test = prepare_data(df_monthly)
 
-    modelo, scaler, y_real, y_pred, fechas = train_and_evaluate(train, test)
+    # 1) Backtest temporal: imprime RMSE/MAE/R2 reales (sin leakage).
+    train_and_evaluate(train, test)
 
-    save_model(modelo, scaler)
-    save_predictions(fechas, y_real, y_pred)
-    plot_results(fechas, y_real, y_pred)
+    # 2) Refit sobre toda la historia para forecast en produccion.
+    df_all = pd.concat([train, test], ignore_index=True)
+    modelo_full, scaler_full, _ = _refit_full(df_all)
 
+    # 3) Forecast recursivo de los 12 meses de YYYY+1.
+    df_year = _forecast_year_plus_1(df_all, modelo_full, scaler_full)
+    target_year = int(df_year["fecha"].dt.year.iloc[0])
+    print(f"\n--- Forecast {len(df_year)} meses para {target_year} ---")
+    for _, r in df_year.iterrows():
+        print(f"  {r['fecha'].strftime('%Y-%m')}: {r['ventas_predichas']:.0f}")
+
+    # 4) Persistencia: modelo refit + CSV + grafica.
+    save_model(modelo_full, scaler_full)
+
+    fechas_fut = list(pd.to_datetime(df_year["fecha"].values))
+    y_fut      = df_year["ventas_predichas"].values
+
+    save_predictions(
+        fechas=[d.date() for d in fechas_fut],
+        y_real=y_fut,
+        y_pred=y_fut,
+    )
+
+    y_hist_real = np.expm1(df_all[TARGET].values)
+    plot_results(
+        fechas_hist=df_all["fecha"].values,
+        y_hist_real=y_hist_real,
+        fechas_fut=fechas_fut,
+        y_fut_pred=y_fut,
+    )
+
+    # 5) DataFrame para el orquestador (12 filas).
     return pd.DataFrame({
-        "fecha":            pd.to_datetime(fechas.values).date,
-        "ventas_reales":    y_real.values,
-        "ventas_predichas": y_pred,
+        "fecha":            [d.date() for d in fechas_fut],
+        "ventas_reales":    y_fut,
+        "ventas_predichas": y_fut,
     })
 
 
