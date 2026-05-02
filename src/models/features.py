@@ -23,9 +23,24 @@ def build_features(df):
     for win in [3]:
         df[f"media_{win}"] = df["ventas"].shift(1).rolling(win).mean()
 
+    # -- Volatilidad reciente: dispersion de los 3 meses previos.
+    # Da al modelo una pista sobre la incertidumbre del nivel actual
+    # (igualmente sin leakage por el shift(1)).
+    df["std_3"] = df["ventas"].shift(1).rolling(3).std()
+
+    # -- Momentum corto: aceleracion entre los dos meses previos.
+    # Captura si la serie venia subiendo o bajando justo antes del mes a predecir.
+    df["diff_1"] = df["ventas"].shift(1) - df["ventas"].shift(2)
+
     # -- Calendario (no dependen del target, no hay leakage posible) --
     df["mes"]       = df["fecha"].dt.month
     df["trimestre"] = df["fecha"].dt.quarter
+
+    # Codificacion ciclica del mes: evita que enero (1) y diciembre (12)
+    # parezcan extremos lejanos para un modelo lineal y captura mejor
+    # la estacionalidad sin requerir un lag_12 (que con <13 meses no existe).
+    df["mes_sin"] = np.sin(2 * np.pi * df["mes"] / 12.0)
+    df["mes_cos"] = np.cos(2 * np.pi * df["mes"] / 12.0)
 
     # Tendencia: numero de meses desde el inicio de la serie
     df["tendencia"] = np.arange(len(df))
@@ -41,13 +56,17 @@ def tratar_outliers(df, columna="ventas"):
     Capeo IQR de outliers. A nivel mensual hay muy pocos puntos asi que
     raramente activa, pero lo dejamos por consistencia con el resto del
     proyecto y por si en el futuro se amplia el historico.
+
+    Multiplicador 3.0 (Tukey "far-outliers"): con <=12 meses la IQR es muy
+    estrecha y el limite estandar 1.5 podia recortar picos legitimos
+    (p.ej. noviembre/diciembre en retail), perjudicando la prediccion.
     """
     q1 = df[columna].quantile(0.25)
     q3 = df[columna].quantile(0.75)
     iqr = q3 - q1
 
-    limite_bajo = q1 - 1.5 * iqr
-    limite_alto = q3 + 1.5 * iqr
+    limite_bajo = q1 - 3.0 * iqr
+    limite_alto = q3 + 3.0 * iqr
 
     detectados = len(df[(df[columna] < limite_bajo) | (df[columna] > limite_alto)])
     print(f"  Outliers detectados: {detectados}")
