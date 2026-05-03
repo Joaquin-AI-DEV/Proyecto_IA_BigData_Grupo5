@@ -97,7 +97,8 @@ repo/
 ├── docs/
 │   ├─── Fase0_Presentacion_y_Viabilidad.pdf
 │   ├─── Fase1_Grupo5.pdf
-│   └─── Fase2_Producto_Funcional_Local_y_Codigo_Grupo5.pdf
+│   ├─── Fase2_Producto_Funcional_Local_y_Codigo_Grupo5.pdf
+│   └─── Fase3_Proyecto_IA_BigData_Grupo5
 ├── environment/
 │   └─── requirements.txt
 ├── src/
@@ -111,9 +112,17 @@ repo/
 │   │    ├─── database.py
 │   │    └─── main.py
 │   ├─── frontend
-│   │    ├─── app.js
+│   │    ├─── js
+│   │    │    ├─── app.js
+│   │    │    └───session.js
+│   │    ├─── css
+│   │    │    └───styles.css
+│   │    ├─── contact.html
+│   │    ├─── dashboard.html
 │   │    ├─── index.html
-│   │    └─── styless.css
+│   │    ├─── navbar.html
+│   │    ├─── ourproject.html
+│   │    └─── sidebar.html
 │   ├─── models
 │   │    ├─── features.py
 │   │    └─── train_model.py
@@ -221,3 +230,5 @@ Contraseña: admin123
 
 # Estado del proyecto
 El proyecto está en fase de pulido, durante la seguiente Fase se introducirán cambios en la visualización, métricas, resultados, métodos y accesibilidad del proyecto.
+
+v1.0.0
