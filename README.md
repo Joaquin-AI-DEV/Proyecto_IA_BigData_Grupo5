@@ -214,11 +214,11 @@ cp environment/.env.example environment/.env
 copy environment\.env.example environment\.env
 
 # El archivo .env debe contener:
-DB_HOST=aws-0-eu-west-1.pooler.supabase.com
-DB_PORT=6543
+DB_HOST=ddbbhost
+DB_PORT=puertobbdd
 DB_NAME=postgres
-DB_USER=postgres.nbamabcfxtcltbzxuncg
-DB_PASSWORD=123Grupo5321
+DB_USER=Usuario
+DB_PASSWORD=password
 ```
 ## 5. Ejecución del proyecto Carga de CSV y Inicio de sesión
 
